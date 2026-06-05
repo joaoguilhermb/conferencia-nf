@@ -12,7 +12,6 @@ export interface NotaApollo {
   nroNota: string;
   issRetido: number;
   totNota: number;
-  cidade: string;
 }
 
 export interface NotaFaltante {
@@ -55,15 +54,8 @@ export function reconciliar(
   livroFiscal: NotaLivroFiscal[],
   apollo: NotaApollo[],
 ): ResultadoReconciliacao {
-  // Filter Apollo: only RONDONOPOLIS
-  const apolloFiltrado = apollo.filter(
-    (n) =>
-      n.cidade?.trim().toUpperCase().replace(/[ÁÀÃÂ]/g, "A") === "RONDONOPOLIS",
-  );
-
-  // Build Apollo lookup by normalized nota number
   const apolloByNota = new Map<string, NotaApollo>();
-  for (const nota of apolloFiltrado) {
+  for (const nota of apollo) {
     apolloByNota.set(normalizarNota(nota.nroNota), nota);
   }
 

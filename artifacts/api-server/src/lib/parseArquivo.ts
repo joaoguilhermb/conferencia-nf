@@ -5,15 +5,22 @@ import type { NotaLivroFiscal, NotaApollo } from "./reconciliacao.js";
 // ---------------------------------------------------------------------------
 
 const CNPJ_RE = /\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/;
-const STATUS_TERMS = ["emitido", "cancelado", "deferido", "substituído", "substituido"];
 
 function toFloat(v: unknown): number {
   if (v === null || v === undefined || v === "") return NaN;
-  const s = String(v)
-    .replace(/[R$\s]/g, "")
-    .replace(/\./g, "")
-    .replace(",", ".");
-  return parseFloat(s);
+
+  // Se já é número, retorna direto
+  if (typeof v === "number") return v;
+
+  const s = String(v).replace(/[R$\s]/g, "").trim();
+
+  // Formato brasileiro: 1.234,56 ou 1234,56
+  if (/^\d{1,3}(\.\d{3})*(,\d+)?$/.test(s) || /^\d+(,\d+)$/.test(s)) {
+    return parseFloat(s.replace(/\./g, "").replace(",", "."));
+  }
+
+  // Formato americano ou já decimal: 1234.56 ou 1234
+  return parseFloat(s.replace(",", "."));
 }
 
 function isDateLike(v: unknown): boolean {
@@ -76,140 +83,52 @@ function parseCNPJ(v: unknown): string {
 
 type LFField = "numeroNota" | "dataEmissao" | "cnpj" | "status" | "issRetido" | "valorISS" | "valorBase";
 
-interface ColScore {
-  colIndex: number;
-  scores: Partial<Record<LFField, number>>;
-}
-
-function detectColumns(
-  rows: unknown[][],
-): Map<LFField, number> {
+function detectColumns(rows: unknown[][]): Map<LFField, number> {
   if (rows.length === 0) throw new Error("Arquivo vazio.");
 
-  const numCols = Math.max(...rows.map((r) => r.length));
-  const colScores: ColScore[] = Array.from({ length: numCols }, (_, i) => ({
-    colIndex: i,
-    scores: {},
-  }));
+  // Layout fixo do Livro Fiscal da Prefeitura de Rondonópolis:
+  // col 0  = data de emissão
+  // col 2  = número da NFS-e
+  // col 4  = prestador (CNPJ + nome)
+  // col 5  = status
+  // col 10 = valor base
+  // col 13 = ISS retido (Sim/Não)
+  // col 15 = valor do ISS
+  const FIXED: [LFField, number][] = [
+    ["dataEmissao", 0],
+    ["numeroNota", 2],
+    ["cnpj", 4],
+    ["status", 5],
+    ["valorBase", 10],
+    ["issRetido", 13],
+    ["valorISS", 15],
+  ];
 
-  for (let ci = 0; ci < numCols; ci++) {
-    const vals = rows.map((r) => r[ci]).filter((v) => v !== null && v !== undefined && v !== "");
-    const n = vals.length;
-    if (n === 0) continue;
+  // Validar com as primeiras 5 linhas que o arquivo está no formato esperado
+  const sample = rows.slice(0, 20);
 
-    // --- Número da NFS-e ---
-    // Integer numeric, values 1–999999, high unique count
-    const intVals = vals.map((v) => {
-      const num = parseFloat(String(v));
-      return Number.isInteger(num) && num >= 1 && num <= 999999 ? num : NaN;
-    });
-    const intRate = intVals.filter((v) => !isNaN(v)).length / n;
-    const uniqueCount = new Set(intVals.filter((v) => !isNaN(v))).size;
-    if (intRate > 0.85 && uniqueCount > 1) {
-      colScores[ci]!.scores.numeroNota = intRate * (uniqueCount / n);
-    }
+  const issRetidoOk = sample.some((r) => {
+    const v = String(r[13] ?? "").trim().toLowerCase();
+    return v === "sim" || v === "não" || v === "nao";
+  });
 
-    // --- Data de emissão ---
-    const dateRate = vals.filter((v) => isDateLike(v)).length / n;
-    if (dateRate > 0.8) {
-      colScores[ci]!.scores.dataEmissao = dateRate;
-    }
+  const cnpjOk = sample.some((r) => CNPJ_RE.test(String(r[4] ?? "")));
 
-    // --- Prestador/CNPJ ---
-    const cnpjRate = vals.filter((v) => CNPJ_RE.test(String(v))).length / n;
-    if (cnpjRate > 0.5) {
-      colScores[ci]!.scores.cnpj = cnpjRate;
-    }
-
-    // --- Status ---
-    const textVals = vals.map((v) => String(v).trim().toLowerCase());
-    const uniqueTextVals = new Set(textVals);
-    const hasStatusTerm = [...uniqueTextVals].some((t) =>
-      STATUS_TERMS.some((s) => t.includes(s)),
-    );
-    if (hasStatusTerm && uniqueTextVals.size < 10) {
-      colScores[ci]!.scores.status = 1 - uniqueTextVals.size / 10;
-    }
-
-    // --- ISS Retido (Sim/Não) ---
-    const issRetidoVals = new Set(textVals);
-    issRetidoVals.delete("");
-    const isSimNao =
-      [...issRetidoVals].every((v) => v === "sim" || v === "não" || v === "nao") &&
-      issRetidoVals.size <= 2 &&
-      issRetidoVals.size >= 1;
-    if (isSimNao) {
-      colScores[ci]!.scores.issRetido = 1;
-    }
-
-    // --- Numeric decimal columns (valorISS, valorBase) ---
-    const floatVals = vals.map((v) => toFloat(v)).filter((v) => !isNaN(v) && v >= 0);
-    const floatRate = floatVals.length / n;
-    if (floatRate > 0.85 && floatVals.length > 0) {
-      const avg = floatVals.reduce((a, b) => a + b, 0) / floatVals.length;
-      // Mark as potential value column with its average for later ordering
-      if (avg > 0) {
-        colScores[ci]!.scores.valorBase = avg; // will be resolved after all cols scored
-        colScores[ci]!.scores.valorISS = avg;
-      }
-    }
-  }
-
-  // --- Resolve best column per field ---
-  const assigned = new Map<LFField, number>();
-  const usedCols = new Set<number>();
-
-  // Priority: deterministic fields first
-  const deterministic: LFField[] = ["issRetido", "cnpj", "status", "dataEmissao", "numeroNota"];
-  for (const field of deterministic) {
-    let best = -1;
-    let bestScore = 0;
-    for (const cs of colScores) {
-      const s = cs.scores[field] ?? 0;
-      if (s > bestScore && !usedCols.has(cs.colIndex)) {
-        bestScore = s;
-        best = cs.colIndex;
-      }
-    }
-    if (best >= 0 && bestScore > 0) {
-      assigned.set(field, best);
-      usedCols.add(best);
-    }
-  }
-
-  // CORREÇÃO - usa posição relativa: valorISS é sempre o mais à direita
-  // entre as colunas numéricas decimais, após o bloco de texto/status
-  const floatCols = colScores
-    .filter(cs => !usedCols.has(cs.colIndex) && (cs.scores.valorBase ?? 0) > 0)
-    .sort((a, b) => a.colIndex - b.colIndex); // ordena por índice crescente
-
-  if (floatCols.length >= 2) {
-    // Mais à esquerda = valorBase, mais à direita = valorISS
-    assigned.set("valorBase", floatCols[0]!.colIndex);
-    usedCols.add(floatCols[0]!.colIndex);
-    assigned.set("valorISS", floatCols[floatCols.length - 1]!.colIndex);
-    usedCols.add(floatCols[floatCols.length - 1]!.colIndex);
-  } else if (floatCols.length === 1) {
-    assigned.set("valorBase", floatCols[0]!.colIndex);
-  }
-
-  // Validate required columns
-  const required: LFField[] = ["numeroNota", "cnpj", "issRetido", "valorBase", "valorISS"];
-  const missing = required.filter((f) => !assigned.has(f));
-  if (missing.length > 0) {
-    const fieldLabels: Record<LFField, string> = {
-      numeroNota: "Número da NFS-e",
-      dataEmissao: "Data de Emissão",
-      cnpj: "Prestador (CNPJ)",
-      status: "Status",
-      issRetido: "ISS Retido (Sim/Não)",
-      valorISS: "Valor do ISS",
-      valorBase: "Valor Base",
-    };
+  if (!issRetidoOk || !cnpjOk) {
     throw new Error(
-      `Não foi possível identificar as seguintes colunas no Livro Fiscal: ${missing.map((f) => fieldLabels[f]).join(", ")}. ` +
-      `Verifique se o arquivo está correto.`,
+      "O arquivo do Livro Fiscal não está no formato esperado. " +
+      "Verifique se é a exportação correta da Prefeitura de Rondonópolis."
     );
+  }
+
+  const assigned = new Map<LFField, number>();
+  for (const [field, col] of FIXED) {
+    assigned.set(field, col);
+  }
+
+  console.log("=== COLUNAS DETECTADAS ===");
+  for (const [field, colIndex] of assigned.entries()) {
+    console.log(`  ${field}: coluna ${colIndex}`);
   }
 
   return assigned;
@@ -254,8 +173,6 @@ export async function parseLivroFiscal(
   // Remove completely empty rows
   rows = rows.filter((r) => r.some((v) => v !== null && v !== undefined && v !== ""));
 
-  // Try to skip header if first row looks like a header (non-numeric values in numeric column)
-  // We detect columns first on all rows, then retry skipping first row if detection fails
   let colMap: Map<LFField, number>;
   try {
     colMap = detectColumns(rows);
@@ -282,15 +199,12 @@ export async function parseLivroFiscal(
     const issRetidoRaw = String(row[irCol] ?? "").trim().toLowerCase();
     const issRetido = issRetidoRaw === "sim" ? "Sim" : issRetidoRaw === "não" || issRetidoRaw === "nao" ? "Não" : null;
 
-    if (issRetido === null) continue; // skip non-data rows
-
-    // Filter: keep only ISS Retido == "Sim"
+    if (issRetido === null) continue;
     if (issRetido !== "Sim") continue;
 
     const status = sCol !== undefined ? String(row[sCol] ?? "").trim() : "";
     const valorISS = toFloat(row[viCol]);
 
-    // Filter: exclude Cancelado with ISS == 0
     if (status.toLowerCase() === "cancelado" && (isNaN(valorISS) || valorISS === 0)) continue;
 
     const numeroNota = String(row[iCol] ?? "").trim().replace(/\.0$/, "");
@@ -354,7 +268,6 @@ export async function parseApollo(
 
   if (jsonData.length === 0) return [];
 
-  // Find columns by name (case-insensitive, trim)
   const headers = Object.keys(jsonData[0]!);
   function findCol(candidates: string[]): string | undefined {
     for (const c of candidates) {
@@ -367,13 +280,11 @@ export async function parseApollo(
   const nroNotaCol = findCol(["nro nota", "nronota", "nota", "número nota", "numero nota", "nf"]);
   const issRetidoCol = findCol(["iss retido", "issretido", "iss"]);
   const totNotaCol = findCol(["totnota", "tot nota", "total nota", "valor total", "total"]);
-  const cidadeCol = findCol(["cidade", "município", "municipio", "city"]);
 
   const missing = [];
   if (!nroNotaCol) missing.push("Nro Nota");
   if (!issRetidoCol) missing.push("ISS Retido");
   if (!totNotaCol) missing.push("TotNota");
-  if (!cidadeCol) missing.push("Cidade");
 
   if (missing.length > 0) {
     throw new Error(
@@ -385,14 +296,6 @@ export async function parseApollo(
   const notas: NotaApollo[] = [];
 
   for (const row of jsonData) {
-    const cidade = String(row[cidadeCol!] ?? "")
-      .trim()
-      .toUpperCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "");
-
-    if (cidade !== "RONDONOPOLIS") continue;
-
     const nroNota = String(row[nroNotaCol!] ?? "").trim().replace(/\.0$/, "");
     if (!nroNota || nroNota === "null") continue;
 
@@ -400,7 +303,6 @@ export async function parseApollo(
       nroNota,
       issRetido: isNaN(toFloat(row[issRetidoCol!])) ? 0 : toFloat(row[issRetidoCol!]),
       totNota: isNaN(toFloat(row[totNotaCol!])) ? 0 : toFloat(row[totNotaCol!]),
-      cidade: String(row[cidadeCol!] ?? "").trim(),
     });
   }
 
