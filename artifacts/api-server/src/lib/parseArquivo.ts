@@ -177,21 +177,18 @@ function detectColumns(
     }
   }
 
-  // Numeric value columns: find remaining float columns, sort by average (descending)
+  // CORREÇÃO - usa posição relativa: valorISS é sempre o mais à direita
+  // entre as colunas numéricas decimais, após o bloco de texto/status
   const floatCols = colScores
-    .filter(
-      (cs) =>
-        !usedCols.has(cs.colIndex) &&
-        (cs.scores.valorBase ?? 0) > 0,
-    )
-    .sort((a, b) => (b.scores.valorBase ?? 0) - (a.scores.valorBase ?? 0));
+    .filter(cs => !usedCols.has(cs.colIndex) && (cs.scores.valorBase ?? 0) > 0)
+    .sort((a, b) => a.colIndex - b.colIndex); // ordena por índice crescente
 
   if (floatCols.length >= 2) {
-    // Largest average = valorBase (comes first)
+    // Mais à esquerda = valorBase, mais à direita = valorISS
     assigned.set("valorBase", floatCols[0]!.colIndex);
     usedCols.add(floatCols[0]!.colIndex);
-    assigned.set("valorISS", floatCols[1]!.colIndex);
-    usedCols.add(floatCols[1]!.colIndex);
+    assigned.set("valorISS", floatCols[floatCols.length - 1]!.colIndex);
+    usedCols.add(floatCols[floatCols.length - 1]!.colIndex);
   } else if (floatCols.length === 1) {
     assigned.set("valorBase", floatCols[0]!.colIndex);
   }
