@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Conferência de Notas Fiscais"
+version = "1.0.0"
+id = "artifacts/conferencia-nf"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25190
+
+[services.development]
+run = "pnpm --filter @workspace/conferencia-nf run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/conferencia-nf", "run", "build" ]
+publicDir = "artifacts/conferencia-nf/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25190"
+BASE_PATH = "/"

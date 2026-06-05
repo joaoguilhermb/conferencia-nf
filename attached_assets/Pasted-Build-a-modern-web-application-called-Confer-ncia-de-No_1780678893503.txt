@@ -1,0 +1,338 @@
+Build a modern web application called "Conferência de Notas Fiscais".
+
+IMPORTANT LANGUAGE REQUIREMENT
+
+The entire application must be written in Brazilian Portuguese (pt-BR).
+
+All user-facing content must be displayed in Portuguese.
+
+This includes:
+
+* Buttons
+* Menus
+* Tabs
+* Forms
+* Tables
+* Dashboard labels
+* Filters
+* Notifications
+* Alerts
+* Error messages
+* Explanations
+* Recommendations
+* Status labels
+* Tooltips
+
+All generated analyses, observations, diagnostics, recommendations and reports must also be written in Portuguese.
+
+No user-facing text may appear in English.
+
+BUSINESS CONTEXT
+
+The Municipal Tax Book (Livro Fiscal) contains invoices issued in the municipality of Rondonópolis.
+
+The Apollo report contains invoices from multiple cities within the state.
+
+Therefore:
+
+The goal is NOT to identify invoices that exist in Apollo but do not exist in the Municipal Tax Book.
+
+Those records must be ignored.
+
+The only objective is to verify whether every invoice from the Municipal Tax Book was correctly posted in Apollo.
+
+The Municipal Tax Book must always be treated as the source of truth.
+
+INPUT FILES
+
+Allow upload of:
+
+1. Livro Fiscal
+2. Relatório Apollo
+
+Accepted formats:
+
+* XLSX
+* CSV
+* PDF
+
+Automatically identify equivalent columns even when column names differ.
+
+EXPECTED FIELDS
+
+Livro Fiscal:
+
+* Número da Nota Fiscal
+* Data de Emissão
+* Razão Social
+* CNPJ
+* Valor Bruto
+* Valor Líquido
+* Valor do ISS
+
+Apollo:
+
+* Número da Nota Fiscal
+* Data de Emissão
+* Razão Social
+* CNPJ
+* Valor Bruto
+* Valor Líquido
+* Valor do ISS
+* Cidade
+
+DATA NORMALIZATION
+
+Before comparison:
+
+* Remove punctuation from CNPJ.
+* Ignore uppercase/lowercase differences.
+* Remove extra spaces.
+* Normalize dates.
+* Normalize monetary values.
+* Ignore formatting differences that do not affect actual values.
+
+COMPARISON STRATEGY
+
+The reconciliation must start from the Livro Fiscal.
+
+For each invoice found in the Livro Fiscal:
+
+1. Search for a matching invoice in Apollo.
+2. Determine whether it exists.
+3. Compare all relevant fields.
+4. Identify possible posting mistakes.
+
+Do NOT create alerts simply because an invoice exists in Apollo but does not exist in the Livro Fiscal.
+
+Those invoices may belong to other cities and are irrelevant.
+
+FIELDS TO COMPARE
+
+* Número da Nota Fiscal
+* Data de Emissão
+* Razão Social
+* CNPJ
+* Valor Bruto
+* Valor Líquido
+* Valor do ISS
+
+CLASSIFICATIONS
+
+If all fields match:
+
+Status:
+"Conciliada"
+
+If the invoice is not found:
+
+Status:
+"Nota Não Localizada"
+
+If the invoice exists but contains different information:
+
+Status:
+"Nota Divergente"
+
+If a likely match exists with a different invoice number:
+
+Status:
+"Possível Erro de Lançamento"
+
+SMART MATCHING
+
+When the invoice number is not found:
+
+Search Apollo records using:
+
+* Same CNPJ
+* Same Razão Social
+* Same Valor Bruto
+* Same Valor Líquido
+* Same Valor do ISS
+* Similar Data de Emissão
+
+Detect situations such as:
+
+* Missing digits
+* Extra digits
+* Inverted digits
+* Similar numbering
+* Typing mistakes
+
+Example:
+
+Livro Fiscal:
+Nota 40
+
+Apollo:
+Nota 4
+
+If the remaining information matches:
+
+Observação:
+"Possível lançamento com número incorreto."
+
+Ação Recomendada:
+"Verificar lançamento e corrigir a numeração da nota fiscal."
+
+CONFIDENCE SCORE
+
+For possible posting errors, calculate a confidence score between 0% and 100%.
+
+Use:
+
+* CNPJ similarity
+* Supplier similarity
+* Gross amount
+* Net amount
+* ISS amount
+* Issue date
+* Invoice number similarity
+
+MAIN DASHBOARD
+
+Display summary cards:
+
+* Total de Notas no Livro Fiscal
+* Total de Notas Conciliadas
+* Total de Notas Não Localizadas
+* Total de Notas Divergentes
+* Total de Possíveis Erros de Lançamento
+
+The dashboard must focus on exceptions and problems requiring action.
+
+The user should immediately see only what needs attention.
+
+RESULT TABLES
+
+TABELA 1 – NOTAS NÃO LOCALIZADAS
+
+Columns:
+
+* Número da Nota
+* Data de Emissão
+* Razão Social
+* CNPJ
+* Valor Bruto
+* Valor Líquido
+* Valor do ISS
+
+TABELA 2 – NOTAS DIVERGENTES
+
+Columns:
+
+* Número da Nota
+* Campo Divergente
+* Valor no Livro Fiscal
+* Valor no Apollo
+* Observação
+* Ação Recomendada
+
+Generate a clear explanation describing the divergence.
+
+Example:
+
+Observação:
+"Valor do ISS divergente entre o Livro Fiscal e o Apollo."
+
+Ação Recomendada:
+"Verificar o lançamento e corrigir o valor do ISS."
+
+TABELA 3 – POSSÍVEIS ERROS DE LANÇAMENTO
+
+Columns:
+
+* Nota no Livro Fiscal
+* Nota no Apollo
+* Razão Social
+* CNPJ
+* Percentual de Confiança
+* Observação
+* Ação Recomendada
+
+Example:
+
+Observação:
+"Possível lançamento realizado com numeração incorreta."
+
+Ação Recomendada:
+"Verificar o lançamento, excluir o registro incorreto e lançar novamente a nota com a numeração correta."
+
+TABELA 4 – NOTAS CONCILIADAS
+
+This table must exist but remain collapsed by default.
+
+The user's focus should be on unresolved issues.
+
+Columns:
+
+* Número da Nota
+* Data de Emissão
+* Razão Social
+* CNPJ
+* Valor Bruto
+* Valor Líquido
+* Valor do ISS
+* Status
+
+FILTERS
+
+Allow filtering by:
+
+* Período
+* Razão Social
+* CNPJ
+* Número da Nota
+* Status
+
+SEARCH
+
+Provide a search box capable of locating records by:
+
+* Número da Nota
+* Razão Social
+* CNPJ
+
+VISUAL DESIGN
+
+Use a clean professional accounting-style interface.
+
+Use color indicators:
+
+* Vermelho = Nota Não Localizada
+* Amarelo = Nota Divergente
+* Azul = Possível Erro de Lançamento
+* Verde = Nota Conciliada
+
+TECHNICAL REQUIREMENTS
+
+Frontend:
+
+* Modern responsive dashboard
+* Drag-and-drop file upload
+* Fast filtering and searching
+
+Backend:
+
+* Efficient processing of large files
+* Fast comparison engine
+* Support hundreds or thousands of invoices
+
+DATABASE
+
+No database is required for version 1.
+
+Process all files in memory.
+
+USER FLOW
+
+1. Upload Livro Fiscal.
+2. Upload Relatório Apollo.
+3. System automatically processes both files.
+4. Dashboard is generated.
+5. User immediately sees only invoices requiring action.
+
+FINAL OBJECTIVE
+
+Eliminate manual invoice-by-invoice verification and allow the user to identify, within seconds, all invoices from the Livro Fiscal that are missing, divergent, or likely posted incorrectly in Apollo.

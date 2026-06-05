@@ -3,13 +3,15 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: API de Conferência de Notas Fiscais
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: reconciliacao
+    description: Reconciliação de notas fiscais
 paths:
   /healthz:
     get:
@@ -24,6 +26,27 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /reconciliacao/processar:
+    post:
+      operationId: processarReconciliacao
+      tags: [reconciliacao]
+      summary: Processar reconciliação de notas fiscais
+      description: Recebe os dois arquivos via multipart/form-data (livroFiscal e apollo) e retorna o resultado da conciliação
+      responses:
+        "200":
+          description: Resultado da reconciliação
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResultadoReconciliacao"
+        "400":
+          description: Erro de validação
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErroResposta"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +57,178 @@ components:
       required:
         - status
 
+    ErroResposta:
+      type: object
+      properties:
+        erro:
+          type: string
+      required:
+        - erro
+
+    CampoDivergente:
+      type: object
+      properties:
+        campo:
+          type: string
+        valorLivroFiscal:
+          type: string
+        valorApollo:
+          type: string
+      required:
+        - campo
+        - valorLivroFiscal
+        - valorApollo
+
+    NotaConciliada:
+      type: object
+      properties:
+        numeroNota:
+          type: string
+        dataEmissao:
+          type: string
+        razaoSocial:
+          type: string
+        cnpj:
+          type: string
+        valorBruto:
+          type: number
+        valorLiquido:
+          type: number
+        valorISS:
+          type: number
+        status:
+          type: string
+      required:
+        - numeroNota
+        - dataEmissao
+        - razaoSocial
+        - cnpj
+        - valorBruto
+        - valorLiquido
+        - valorISS
+        - status
+
+    NotaNaoLocalizada:
+      type: object
+      properties:
+        numeroNota:
+          type: string
+        dataEmissao:
+          type: string
+        razaoSocial:
+          type: string
+        cnpj:
+          type: string
+        valorBruto:
+          type: number
+        valorLiquido:
+          type: number
+        valorISS:
+          type: number
+      required:
+        - numeroNota
+        - dataEmissao
+        - razaoSocial
+        - cnpj
+        - valorBruto
+        - valorLiquido
+        - valorISS
+
+    NotaDivergente:
+      type: object
+      properties:
+        numeroNota:
+          type: string
+        razaoSocial:
+          type: string
+        cnpj:
+          type: string
+        camposDivergentes:
+          type: array
+          items:
+            $ref: "#/components/schemas/CampoDivergente"
+        observacao:
+          type: string
+        acaoRecomendada:
+          type: string
+      required:
+        - numeroNota
+        - razaoSocial
+        - cnpj
+        - camposDivergentes
+        - observacao
+        - acaoRecomendada
+
+    PossivelErroLancamento:
+      type: object
+      properties:
+        notaLivroFiscal:
+          type: string
+        notaApollo:
+          type: string
+        razaoSocial:
+          type: string
+        cnpj:
+          type: string
+        percentualConfianca:
+          type: number
+        observacao:
+          type: string
+        acaoRecomendada:
+          type: string
+      required:
+        - notaLivroFiscal
+        - notaApollo
+        - razaoSocial
+        - cnpj
+        - percentualConfianca
+        - observacao
+        - acaoRecomendada
+
+    ResumoReconciliacao:
+      type: object
+      properties:
+        totalLivroFiscal:
+          type: integer
+        totalConciliadas:
+          type: integer
+        totalNaoLocalizadas:
+          type: integer
+        totalDivergentes:
+          type: integer
+        totalPosiveisErros:
+          type: integer
+      required:
+        - totalLivroFiscal
+        - totalConciliadas
+        - totalNaoLocalizadas
+        - totalDivergentes
+        - totalPosiveisErros
+
+    ResultadoReconciliacao:
+      type: object
+      properties:
+        resumo:
+          $ref: "#/components/schemas/ResumoReconciliacao"
+        conciliadas:
+          type: array
+          items:
+            $ref: "#/components/schemas/NotaConciliada"
+        naoLocalizadas:
+          type: array
+          items:
+            $ref: "#/components/schemas/NotaNaoLocalizada"
+        divergentes:
+          type: array
+          items:
+            $ref: "#/components/schemas/NotaDivergente"
+        posiveisErros:
+          type: array
+          items:
+            $ref: "#/components/schemas/PossivelErroLancamento"
+      required:
+        - resumo
+        - conciliadas
+        - naoLocalizadas
+        - divergentes
+        - posiveisErros
