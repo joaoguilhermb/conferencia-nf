@@ -18,57 +18,33 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
- * Recebe os dois arquivos via multipart/form-data (livroFiscal e apollo) e retorna o resultado da conciliação
+ * Recebe os dois arquivos via multipart/form-data (livroFiscal e apollo) e retorna faltantes e divergências
  * @summary Processar reconciliação de notas fiscais
  */
 export const ProcessarReconciliacaoResponse = zod.object({
   "resumo": zod.object({
   "totalLivroFiscal": zod.number(),
-  "totalConciliadas": zod.number(),
-  "totalNaoLocalizadas": zod.number(),
-  "totalDivergentes": zod.number(),
-  "totalPosiveisErros": zod.number()
+  "totalFaltantes": zod.number(),
+  "totalDivergencias": zod.number()
 }),
-  "conciliadas": zod.array(zod.object({
+  "faltantes": zod.array(zod.object({
   "numeroNota": zod.string(),
   "dataEmissao": zod.string(),
-  "razaoSocial": zod.string(),
   "cnpj": zod.string(),
-  "valorBruto": zod.number(),
-  "valorLiquido": zod.number(),
-  "valorISS": zod.number(),
-  "status": zod.string()
-})),
-  "naoLocalizadas": zod.array(zod.object({
-  "numeroNota": zod.string(),
-  "dataEmissao": zod.string(),
-  "razaoSocial": zod.string(),
-  "cnpj": zod.string(),
-  "valorBruto": zod.number(),
-  "valorLiquido": zod.number(),
+  "status": zod.string(),
+  "valorBase": zod.number(),
   "valorISS": zod.number()
-})),
-  "divergentes": zod.array(zod.object({
+}).describe('Nota presente no Livro Fiscal mas não localizada no Apollo')),
+  "divergencias": zod.array(zod.object({
   "numeroNota": zod.string(),
-  "razaoSocial": zod.string(),
   "cnpj": zod.string(),
-  "camposDivergentes": zod.array(zod.object({
-  "campo": zod.string(),
-  "valorLivroFiscal": zod.string(),
-  "valorApollo": zod.string()
-})),
-  "observacao": zod.string(),
-  "acaoRecomendada": zod.string()
-})),
-  "posiveisErros": zod.array(zod.object({
-  "notaLivroFiscal": zod.string(),
-  "notaApollo": zod.string(),
-  "razaoSocial": zod.string(),
-  "cnpj": zod.string(),
-  "percentualConfianca": zod.number(),
-  "observacao": zod.string(),
-  "acaoRecomendada": zod.string()
-}))
+  "valorBaseLF": zod.number(),
+  "valorBaseApollo": zod.number(),
+  "difBase": zod.number(),
+  "valorISSLF": zod.number(),
+  "valorISSApollo": zod.number(),
+  "difISS": zod.number()
+}).describe('Nota presente nos dois arquivos mas com divergência de valor maior que R$0,05'))
 })
 
 

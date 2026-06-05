@@ -8,8 +8,6 @@
 
 export interface ResumoReconciliacao {
   totalLivroFiscal: number;
-  totalConciliadas: number;
-  totalNaoLocalizadas: number;
-  totalDivergentes: number;
-  totalPosiveisErros: number;
+  totalFaltantes: number;
+  totalDivergencias: number;
 }

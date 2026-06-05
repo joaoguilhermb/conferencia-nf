@@ -13,65 +13,41 @@ export interface ErroResposta {
   erro: string;
 }
 
-export interface CampoDivergente {
-  campo: string;
-  valorLivroFiscal: string;
-  valorApollo: string;
-}
-
-export interface NotaConciliada {
+/**
+ * Nota presente no Livro Fiscal mas não localizada no Apollo
+ */
+export interface NotaFaltante {
   numeroNota: string;
   dataEmissao: string;
-  razaoSocial: string;
   cnpj: string;
-  valorBruto: number;
-  valorLiquido: number;
-  valorISS: number;
   status: string;
-}
-
-export interface NotaNaoLocalizada {
-  numeroNota: string;
-  dataEmissao: string;
-  razaoSocial: string;
-  cnpj: string;
-  valorBruto: number;
-  valorLiquido: number;
+  valorBase: number;
   valorISS: number;
 }
 
+/**
+ * Nota presente nos dois arquivos mas com divergência de valor maior que R$0,05
+ */
 export interface NotaDivergente {
   numeroNota: string;
-  razaoSocial: string;
   cnpj: string;
-  camposDivergentes: CampoDivergente[];
-  observacao: string;
-  acaoRecomendada: string;
-}
-
-export interface PossivelErroLancamento {
-  notaLivroFiscal: string;
-  notaApollo: string;
-  razaoSocial: string;
-  cnpj: string;
-  percentualConfianca: number;
-  observacao: string;
-  acaoRecomendada: string;
+  valorBaseLF: number;
+  valorBaseApollo: number;
+  difBase: number;
+  valorISSLF: number;
+  valorISSApollo: number;
+  difISS: number;
 }
 
 export interface ResumoReconciliacao {
   totalLivroFiscal: number;
-  totalConciliadas: number;
-  totalNaoLocalizadas: number;
-  totalDivergentes: number;
-  totalPosiveisErros: number;
+  totalFaltantes: number;
+  totalDivergencias: number;
 }
 
 export interface ResultadoReconciliacao {
   resumo: ResumoReconciliacao;
-  conciliadas: NotaConciliada[];
-  naoLocalizadas: NotaNaoLocalizada[];
-  divergentes: NotaDivergente[];
-  posiveisErros: PossivelErroLancamento[];
+  faltantes: NotaFaltante[];
+  divergencias: NotaDivergente[];
 }
 

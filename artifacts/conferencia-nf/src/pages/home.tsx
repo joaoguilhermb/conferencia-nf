@@ -1,7 +1,7 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { UploadScreen } from "@/components/upload-screen";
 import { ResultsDashboard } from "@/components/results-dashboard";
-import { ResultadoReconciliacao } from "@workspace/api-client-react/src/generated/api.schemas";
+import type { ResultadoReconciliacao } from "@workspace/api-client-react/src/generated/api.schemas";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Home() {
@@ -26,16 +26,17 @@ export default function Home() {
         throw new Error(errorData.erro || "Falha ao processar a conciliação");
       }
 
-      const data = await response.json();
+      const data: ResultadoReconciliacao = await response.json();
       setResults(data);
       toast({
-        title: "Sucesso",
-        description: "Conciliação processada com sucesso.",
+        title: "Conciliação concluída",
+        description: `${data.resumo.totalLivroFiscal} notas processadas — ${data.resumo.totalFaltantes} faltantes, ${data.resumo.totalDivergencias} divergências.`,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Ocorreu um erro inesperado.";
       toast({
-        title: "Erro",
-        description: error.message || "Ocorreu um erro inesperado.",
+        title: "Erro ao processar",
+        description: msg,
         variant: "destructive",
       });
     } finally {
@@ -43,15 +44,13 @@ export default function Home() {
     }
   };
 
-  const handleReset = () => {
-    setResults(null);
-  };
+  const handleReset = () => setResults(null);
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
       <header className="border-b bg-card px-6 py-4 flex items-center justify-between sticky top-0 z-10 shadow-sm">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold">
+          <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold text-sm">
             R
           </div>
           <div>

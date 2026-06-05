@@ -5,16 +5,12 @@
  * API de Conferência de Notas Fiscais
  * OpenAPI spec version: 0.1.0
  */
-import type { NotaConciliada } from './notaConciliada';
 import type { NotaDivergente } from './notaDivergente';
-import type { NotaNaoLocalizada } from './notaNaoLocalizada';
-import type { PossivelErroLancamento } from './possivelErroLancamento';
+import type { NotaFaltante } from './notaFaltante';
 import type { ResumoReconciliacao } from './resumoReconciliacao';
 
 export interface ResultadoReconciliacao {
   resumo: ResumoReconciliacao;
-  conciliadas: NotaConciliada[];
-  naoLocalizadas: NotaNaoLocalizada[];
-  divergentes: NotaDivergente[];
-  posiveisErros: PossivelErroLancamento[];
+  faltantes: NotaFaltante[];
+  divergencias: NotaDivergente[];
 }

@@ -6,12 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export * from './campoDivergente';
 export * from './erroResposta';
 export * from './healthStatus';
-export * from './notaConciliada';
 export * from './notaDivergente';
-export * from './notaNaoLocalizada';
-export * from './possivelErroLancamento';
+export * from './notaFaltante';
 export * from './resultadoReconciliacao';
 export * from './resumoReconciliacao';

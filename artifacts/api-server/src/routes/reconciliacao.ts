@@ -1,13 +1,13 @@
 import { Router } from "express";
 import multer from "multer";
-import { parseArquivo } from "../lib/parseArquivo.js";
+import { parseLivroFiscal, parseApollo } from "../lib/parseArquivo.js";
 import { reconciliar } from "../lib/reconciliacao.js";
 
 const router = Router();
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
+  limits: { fileSize: 50 * 1024 * 1024 },
 });
 
 router.post(
@@ -18,21 +18,14 @@ router.post(
   ]),
   async (req, res) => {
     try {
-      const files = req.files as
-        | Record<string, Express.Multer.File[]>
-        | undefined;
+      const files = req.files as Record<string, Express.Multer.File[]> | undefined;
 
       if (!files?.["livroFiscal"]?.[0]) {
-        res
-          .status(400)
-          .json({ erro: "Arquivo do Livro Fiscal não enviado." });
+        res.status(400).json({ erro: "Arquivo do Livro Fiscal não enviado." });
         return;
       }
-
       if (!files?.["apollo"]?.[0]) {
-        res
-          .status(400)
-          .json({ erro: "Arquivo do Relatório Apollo não enviado." });
+        res.status(400).json({ erro: "Arquivo do Relatório Apollo não enviado." });
         return;
       }
 
@@ -40,57 +33,36 @@ router.post(
       const apolloFile = files["apollo"][0];
 
       req.log.info(
-        {
-          livroFiscal: livroFiscalFile.originalname,
-          apollo: apolloFile.originalname,
-        },
+        { livroFiscal: livroFiscalFile.originalname, apollo: apolloFile.originalname },
         "Iniciando processamento de reconciliação",
       );
 
-      const [notasLivroFiscal, notasApollo] = await Promise.all([
-        parseArquivo(
-          livroFiscalFile.buffer,
-          livroFiscalFile.mimetype,
-          livroFiscalFile.originalname,
-        ),
-        parseArquivo(
-          apolloFile.buffer,
-          apolloFile.mimetype,
-          apolloFile.originalname,
-        ),
+      const [notasLF, notasApollo] = await Promise.all([
+        parseLivroFiscal(livroFiscalFile.buffer, livroFiscalFile.mimetype, livroFiscalFile.originalname),
+        parseApollo(apolloFile.buffer, apolloFile.mimetype, apolloFile.originalname),
       ]);
 
-      if (notasLivroFiscal.length === 0) {
+      if (notasLF.length === 0) {
         res.status(400).json({
-          erro:
-            "Nenhuma nota fiscal foi encontrada no Livro Fiscal. Verifique se as colunas estão corretamente nomeadas.",
+          erro: "Nenhuma nota fiscal válida foi encontrada no Livro Fiscal após os filtros (ISS Retido = Sim, excluindo canceladas com ISS = 0). Verifique se o arquivo está correto.",
         });
         return;
       }
 
       req.log.info(
-        {
-          totalLivroFiscal: notasLivroFiscal.length,
-          totalApollo: notasApollo.length,
-        },
+        { totalLivroFiscal: notasLF.length, totalApollo: notasApollo.length },
         "Notas carregadas, iniciando reconciliação",
       );
 
-      const resultado = reconciliar(notasLivroFiscal, notasApollo);
+      const resultado = reconciliar(notasLF, notasApollo);
 
-      req.log.info(
-        resultado.resumo,
-        "Reconciliação concluída",
-      );
+      req.log.info(resultado.resumo, "Reconciliação concluída");
 
       res.json(resultado);
     } catch (err) {
       req.log.error({ err }, "Erro durante processamento de reconciliação");
       res.status(400).json({
-        erro:
-          err instanceof Error
-            ? err.message
-            : "Erro ao processar os arquivos.",
+        erro: err instanceof Error ? err.message : "Erro ao processar os arquivos.",
       });
     }
   },

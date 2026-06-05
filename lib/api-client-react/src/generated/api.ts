@@ -124,7 +124,7 @@ export const getProcessarReconciliacaoUrl = () => {
 }
 
 /**
- * Recebe os dois arquivos via multipart/form-data (livroFiscal e apollo) e retorna o resultado da conciliação
+ * Recebe os dois arquivos via multipart/form-data (livroFiscal e apollo) e retorna faltantes e divergências
  * @summary Processar reconciliação de notas fiscais
  */
 export const processarReconciliacao = async ( options?: RequestInit): Promise<ResultadoReconciliacao> => {

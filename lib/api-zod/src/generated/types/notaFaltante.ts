@@ -6,12 +6,14 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface NotaNaoLocalizada {
+/**
+ * Nota presente no Livro Fiscal mas não localizada no Apollo
+ */
+export interface NotaFaltante {
   numeroNota: string;
   dataEmissao: string;
-  razaoSocial: string;
   cnpj: string;
-  valorBruto: number;
-  valorLiquido: number;
+  status: string;
+  valorBase: number;
   valorISS: number;
 }

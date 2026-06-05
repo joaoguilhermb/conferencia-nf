@@ -32,7 +32,7 @@ paths:
       operationId: processarReconciliacao
       tags: [reconciliacao]
       summary: Processar reconciliação de notas fiscais
-      description: Recebe os dois arquivos via multipart/form-data (livroFiscal e apollo) e retorna o resultado da conciliação
+      description: Recebe os dois arquivos via multipart/form-data (livroFiscal e apollo) e retorna faltantes e divergências
       responses:
         "200":
           description: Resultado da reconciliação
@@ -65,170 +65,88 @@ components:
       required:
         - erro
 
-    CampoDivergente:
+    NotaFaltante:
       type: object
-      properties:
-        campo:
-          type: string
-        valorLivroFiscal:
-          type: string
-        valorApollo:
-          type: string
-      required:
-        - campo
-        - valorLivroFiscal
-        - valorApollo
-
-    NotaConciliada:
-      type: object
+      description: Nota presente no Livro Fiscal mas não localizada no Apollo
       properties:
         numeroNota:
           type: string
         dataEmissao:
           type: string
-        razaoSocial:
-          type: string
         cnpj:
           type: string
-        valorBruto:
-          type: number
-        valorLiquido:
-          type: number
-        valorISS:
-          type: number
         status:
           type: string
-      required:
-        - numeroNota
-        - dataEmissao
-        - razaoSocial
-        - cnpj
-        - valorBruto
-        - valorLiquido
-        - valorISS
-        - status
-
-    NotaNaoLocalizada:
-      type: object
-      properties:
-        numeroNota:
-          type: string
-        dataEmissao:
-          type: string
-        razaoSocial:
-          type: string
-        cnpj:
-          type: string
-        valorBruto:
-          type: number
-        valorLiquido:
+        valorBase:
           type: number
         valorISS:
           type: number
       required:
         - numeroNota
         - dataEmissao
-        - razaoSocial
         - cnpj
-        - valorBruto
-        - valorLiquido
+        - status
+        - valorBase
         - valorISS
 
     NotaDivergente:
       type: object
+      description: Nota presente nos dois arquivos mas com divergência de valor maior que R$0,05
       properties:
         numeroNota:
           type: string
-        razaoSocial:
-          type: string
         cnpj:
           type: string
-        camposDivergentes:
-          type: array
-          items:
-            $ref: "#/components/schemas/CampoDivergente"
-        observacao:
-          type: string
-        acaoRecomendada:
-          type: string
+        valorBaseLF:
+          type: number
+        valorBaseApollo:
+          type: number
+        difBase:
+          type: number
+        valorISSLF:
+          type: number
+        valorISSApollo:
+          type: number
+        difISS:
+          type: number
       required:
         - numeroNota
-        - razaoSocial
         - cnpj
-        - camposDivergentes
-        - observacao
-        - acaoRecomendada
-
-    PossivelErroLancamento:
-      type: object
-      properties:
-        notaLivroFiscal:
-          type: string
-        notaApollo:
-          type: string
-        razaoSocial:
-          type: string
-        cnpj:
-          type: string
-        percentualConfianca:
-          type: number
-        observacao:
-          type: string
-        acaoRecomendada:
-          type: string
-      required:
-        - notaLivroFiscal
-        - notaApollo
-        - razaoSocial
-        - cnpj
-        - percentualConfianca
-        - observacao
-        - acaoRecomendada
+        - valorBaseLF
+        - valorBaseApollo
+        - difBase
+        - valorISSLF
+        - valorISSApollo
+        - difISS
 
     ResumoReconciliacao:
       type: object
       properties:
         totalLivroFiscal:
           type: integer
-        totalConciliadas:
+        totalFaltantes:
           type: integer
-        totalNaoLocalizadas:
-          type: integer
-        totalDivergentes:
-          type: integer
-        totalPosiveisErros:
+        totalDivergencias:
           type: integer
       required:
         - totalLivroFiscal
-        - totalConciliadas
-        - totalNaoLocalizadas
-        - totalDivergentes
-        - totalPosiveisErros
+        - totalFaltantes
+        - totalDivergencias
 
     ResultadoReconciliacao:
       type: object
       properties:
         resumo:
           $ref: "#/components/schemas/ResumoReconciliacao"
-        conciliadas:
+        faltantes:
           type: array
           items:
-            $ref: "#/components/schemas/NotaConciliada"
-        naoLocalizadas:
-          type: array
-          items:
-            $ref: "#/components/schemas/NotaNaoLocalizada"
-        divergentes:
+            $ref: "#/components/schemas/NotaFaltante"
+        divergencias:
           type: array
           items:
             $ref: "#/components/schemas/NotaDivergente"
-        posiveisErros:
-          type: array
-          items:
-            $ref: "#/components/schemas/PossivelErroLancamento"
       required:
         - resumo
-        - conciliadas
-        - naoLocalizadas
-        - divergentes
-        - posiveisErros
+        - faltantes
+        - divergencias

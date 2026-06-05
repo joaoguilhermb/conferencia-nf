@@ -5,13 +5,17 @@
  * API de Conferência de Notas Fiscais
  * OpenAPI spec version: 0.1.0
  */
-import type { CampoDivergente } from './campoDivergente';
 
+/**
+ * Nota presente nos dois arquivos mas com divergência de valor maior que R$0,05
+ */
 export interface NotaDivergente {
   numeroNota: string;
-  razaoSocial: string;
   cnpj: string;
-  camposDivergentes: CampoDivergente[];
-  observacao: string;
-  acaoRecomendada: string;
+  valorBaseLF: number;
+  valorBaseApollo: number;
+  difBase: number;
+  valorISSLF: number;
+  valorISSApollo: number;
+  difISS: number;
 }
