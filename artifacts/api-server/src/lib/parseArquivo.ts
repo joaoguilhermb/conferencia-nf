@@ -6,6 +6,14 @@ import type { NotaLivroFiscal, NotaApollo } from "./reconciliacao.js";
 
 const CNPJ_RE = /\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/;
 
+function parseRazaoSocial(v: unknown): string {
+  if (!v) return "";
+  const s = String(v).trim();
+  // Formato da coluna 4: "12.345.678/0001-90 NOME DO FORNECEDOR"
+  // Remove o CNPJ formatado do início e retorna o restante
+  return s.replace(/^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\s*/, "").trim();
+}
+
 function toFloat(v: unknown): number {
   if (v === null || v === undefined || v === "") return NaN;
 
@@ -193,29 +201,32 @@ export async function parseLivroFiscal(
   const vbCol = colMap.get("valorBase")!;
   const viCol = colMap.get("valorISS")!;
 
+  // parseLivroFiscal — substitui o loop inteiro de montagem das notas
   const notas: NotaLivroFiscal[] = [];
 
   for (const row of rows) {
-    const issRetidoRaw = String(row[irCol] ?? "").trim().toLowerCase();
-    const issRetido = issRetidoRaw === "sim" ? "Sim" : issRetidoRaw === "não" || issRetidoRaw === "nao" ? "Não" : null;
-
-    if (issRetido === null) continue;
-    if (issRetido !== "Sim") continue;
-
-    const status = sCol !== undefined ? String(row[sCol] ?? "").trim() : "";
-    const valorISS = toFloat(row[viCol]);
-
-    if (status.toLowerCase() === "cancelado" && (isNaN(valorISS) || valorISS === 0)) continue;
-
     const numeroNota = String(row[iCol] ?? "").trim().replace(/\.0$/, "");
     if (!numeroNota || numeroNota === "null") continue;
+
+    const status = sCol !== undefined ? String(row[sCol] ?? "").trim() : "";
+
+    // Inclui emitidas e canceladas — exclui deferidas e qualquer outro status
+    const statusNorm = status.toLowerCase();
+    if (statusNorm !== "emitido" && statusNorm !== "cancelado") continue;
+
+    const issRetidoRaw = String(row[irCol] ?? "").trim().toLowerCase();
+    const issRetido: "Sim" | "Não" =
+      issRetidoRaw === "sim" ? "Sim" : "Não";
+
+    const valorISS = toFloat(row[viCol]);
 
     notas.push({
       numeroNota,
       dataEmissao: dCol !== undefined ? parseDate(row[dCol]) : "",
       cnpj: parseCNPJ(row[cCol]),
+      razaoSocial: parseRazaoSocial(row[cCol]),
       status,
-      issRetido: "Sim",
+      issRetido,
       valorBase: isNaN(toFloat(row[vbCol])) ? 0 : toFloat(row[vbCol]),
       valorISS: isNaN(valorISS) ? 0 : valorISS,
     });
