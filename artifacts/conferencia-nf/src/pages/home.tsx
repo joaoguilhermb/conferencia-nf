@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { UploadScreen } from "@/components/upload-screen";
 import { ResultsDashboard } from "@/components/results-dashboard";
 import type { ResultadoReconciliacao } from "@/types/reconciliacao";
 import { useToast } from "@/hooks/use-toast";
-import { User } from "lucide-react";
+import { User, RefreshCw, Clock } from "lucide-react";
 
 // ---------------------------------------------------------------------------
 // Tela de login — só pede o nome
@@ -73,24 +73,94 @@ function getIniciais(nome: string): string {
   if (partes.length === 1) return partes[0]![0]!.toUpperCase();
   return (partes[0]![0]! + partes[partes.length - 1]![0]!).toUpperCase();
 }
+
+function formatarDataHora(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Página principal
 // ---------------------------------------------------------------------------
 export default function Home() {
   const [usuario, setUsuario] = useState<string | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [isProcessingReconciliacao, setIsProcessingReconciliacao] = useState(false);
+  const [isAtualizando, setIsAtualizando] = useState(false);
+  const [isLoadingDashboard, setIsLoadingDashboard] = useState(false);
   const [results, setResults] = useState<ResultadoReconciliacao | null>(null);
+  const [competencia, setCompetencia] = useState<"mesAtual" | "mesAnterior">("mesAtual");
   const { toast } = useToast();
 
-  // Antes de tudo: exige nome
+  // Load dashboard on first render after login
+  const carregarDashboard = useCallback(async () => {
+    setIsLoadingDashboard(true);
+    try {
+      const res = await fetch("/api/dashboard");
+      if (!res.ok) throw new Error("Falha ao carregar dashboard");
+      const data: ResultadoReconciliacao = await res.json();
+      // Only set results if there's actual data (avoid empty placeholder state)
+      if (data.resumo.totalNotas > 0) {
+        setResults(data);
+      }
+    } catch (err) {
+      // Silently fail on initial load — user can still use the upload screen
+    } finally {
+      setIsLoadingDashboard(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (usuario) {
+      void carregarDashboard();
+    }
+  }, [usuario, carregarDashboard]);
+
   if (!usuario) {
     return <LoginScreen onLogin={setUsuario} />;
   }
 
-  const handleProcess = async (livroFiscal: File, apollo: File) => {
-    setIsProcessing(true);
+  // ────────────────────────────────────────────────────────────
+  // Handlers
+  // ────────────────────────────────────────────────────────────
+
+  const handleAtualizarPortal = async () => {
+    setIsAtualizando(true);
+    try {
+      const res = await fetch("/api/notas/atualizar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ competencia }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.erro ?? "Erro ao atualizar notas");
+
+      toast({
+        title: "Portal atualizado",
+        description: `${data.totalInseridas} inseridas, ${data.totalAtualizadas} atualizadas, ${data.totalCanceladas} canceladas.`,
+      });
+
+      // Reload dashboard after update
+      await carregarDashboard();
+    } catch (err) {
+      toast({
+        title: "Erro ao buscar notas",
+        description: err instanceof Error ? err.message : "Erro desconhecido.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsAtualizando(false);
+    }
+  };
+
+  const handleProcessApollo = async (apollo: File) => {
+    setIsProcessingReconciliacao(true);
     const formData = new FormData();
-    formData.append("livroFiscal", livroFiscal);
     formData.append("apollo", apollo);
 
     try {
@@ -108,7 +178,7 @@ export default function Home() {
       setResults(data);
       toast({
         title: "Conciliação concluída",
-        description: `${data.resumo.totalLivroFiscal} notas processadas — ${data.resumo.totalFaltantes} faltantes, ${data.resumo.totalDivergencias} divergências.`,
+        description: `${data.resumo.totalNotas} notas avaliadas — ${data.resumo.totalFaltantes} faltantes, ${data.resumo.totalDivergencias} divergências.`,
       });
     } catch (error: unknown) {
       const msg =
@@ -119,49 +189,76 @@ export default function Home() {
         variant: "destructive",
       });
     } finally {
-      setIsProcessing(false);
+      setIsProcessingReconciliacao(false);
     }
   };
 
-  const handleReset = () => setResults(null);
-
+  // ────────────────────────────────────────────────────────────
+  // Render
+  // ────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
       <header className="border-b bg-card px-6 py-4 flex items-center justify-between sticky top-0 z-10 shadow-sm">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold text-sm">
-             {getIniciais(usuario)}
+            {getIniciais(usuario)}
           </div>
           <div>
             <h1 className="font-semibold text-lg leading-tight">
               Conferência de Notas Fiscais
             </h1>
-            {/* Nome do usuário no lugar de "Prefeitura de Rondonópolis" */}
             <p className="text-xs text-muted-foreground flex items-center gap-1">
               <User className="w-3 h-3" />
               Usuário: {usuario}
             </p>
           </div>
         </div>
-        {results && (
-          <button
-            data-testid="button-nova-conciliacao"
-            onClick={handleReset}
-            className="text-sm font-medium bg-primary text-primary-foreground px-4 py-2 rounded-md hover:bg-primary/90 transition-colors"
+
+        {/* Portal update controls — always visible after login */}
+        <div className="flex items-center gap-3">
+          {results?.ultimaAtualizacao && (
+            <p className="text-xs text-muted-foreground flex items-center gap-1 hidden sm:flex">
+              <Clock className="w-3 h-3" />
+              Atualizado em {formatarDataHora(results.ultimaAtualizacao)}
+            </p>
+          )}
+          <select
+            id="select-competencia"
+            value={competencia}
+            onChange={(e) => setCompetencia(e.target.value as "mesAtual" | "mesAnterior")}
+            className="text-sm border border-input rounded-md px-2 py-1.5 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
           >
-            Nova Conciliação
+            <option value="mesAtual">Mês atual</option>
+            <option value="mesAnterior">Mês anterior</option>
+          </select>
+          <button
+            id="btn-atualizar-portal"
+            onClick={handleAtualizarPortal}
+            disabled={isAtualizando}
+            className="flex items-center gap-1.5 text-sm font-medium bg-secondary text-secondary-foreground px-3 py-1.5 rounded-md hover:bg-secondary/80 disabled:opacity-50 transition-colors"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isAtualizando ? "animate-spin" : ""}`} />
+            {isAtualizando ? "Buscando…" : "Buscar no Portal"}
           </button>
-        )}
+        </div>
       </header>
 
       <main className="flex-1 p-6 flex flex-col items-center">
-        {results ? (
+        {isLoadingDashboard && !results ? (
+          <div className="flex items-center gap-2 text-muted-foreground mt-24">
+            <RefreshCw className="w-4 h-4 animate-spin" />
+            Carregando dados do banco…
+          </div>
+        ) : results ? (
           <div className="w-full max-w-7xl">
             <ResultsDashboard results={results} />
           </div>
         ) : (
           <div className="w-full max-w-2xl mt-12">
-            <UploadScreen onProcess={handleProcess} isProcessing={isProcessing} />
+            <UploadScreen
+              onProcess={handleProcessApollo}
+              isProcessing={isProcessingReconciliacao}
+            />
           </div>
         )}
       </main>

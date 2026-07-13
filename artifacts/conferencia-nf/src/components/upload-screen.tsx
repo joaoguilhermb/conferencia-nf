@@ -1,42 +1,37 @@
 import React, { useState, useRef } from "react";
-import { UploadCloud, FileText, CheckCircle2, XCircle } from "lucide-react";
+import { UploadCloud, CheckCircle2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 
 interface UploadScreenProps {
-  onProcess: (livroFiscal: File, apollo: File) => void;
+  onProcess: (apollo: File) => void;
   isProcessing: boolean;
 }
 
 export function UploadScreen({ onProcess, isProcessing }: UploadScreenProps) {
-  const [livroFiscal, setLivroFiscal] = useState<File | null>(null);
   const [apollo, setApollo] = useState<File | null>(null);
 
   const handleProcessClick = () => {
-    if (livroFiscal && apollo) {
-      onProcess(livroFiscal, apollo);
+    if (apollo) {
+      onProcess(apollo);
     }
   };
 
   return (
     <Card className="w-full shadow-lg border-t-4 border-t-primary">
       <CardHeader className="text-center pb-8">
-        <CardTitle className="text-2xl font-bold">Importação de Arquivos</CardTitle>
+        <CardTitle className="text-2xl font-bold">Reconciliação Apollo</CardTitle>
         <CardDescription>
-          Selecione os arquivos necessários para iniciar a conciliação.
-          <br/>Formatos aceitos: XLSX, CSV, PDF.
+          As notas do portal já estão no banco de dados.
+          <br />
+          Envie o Relatório Apollo para reconciliar.
+          <br />
+          Formatos aceitos: XLSX, CSV, PDF.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <FileDropzone
-            id="livroFiscal"
-            label="Livro Fiscal"
-            file={livroFiscal}
-            onFileSelect={setLivroFiscal}
-            disabled={isProcessing}
-          />
+        <div className="max-w-sm mx-auto">
           <FileDropzone
             id="apollo"
             label="Relatório Apollo"
@@ -52,7 +47,7 @@ export function UploadScreen({ onProcess, isProcessing }: UploadScreenProps) {
             size="lg"
             className="w-full md:w-auto min-w-[200px]"
             onClick={handleProcessClick}
-            disabled={!livroFiscal || !apollo || isProcessing}
+            disabled={!apollo || isProcessing}
           >
             {isProcessing ? (
               <>
@@ -78,14 +73,14 @@ function FileDropzone({
   id: string;
   label: string;
   file: File | null;
-  onFileSelect: (file: File) => void;
+  onFileSelect: (file: File | null) => void;
   disabled: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      onFileSelect(e.target.files[0]);
+      onFileSelect(e.target.files[0] ?? null);
     }
   };
 
@@ -117,7 +112,7 @@ function FileDropzone({
             className="text-xs text-destructive mt-3 hover:underline"
             onClick={(e) => {
               e.stopPropagation();
-              onFileSelect(null as any);
+              onFileSelect(null);
               if (inputRef.current) inputRef.current.value = "";
             }}
             disabled={disabled}

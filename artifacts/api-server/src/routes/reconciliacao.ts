@@ -1,7 +1,8 @@
 import { Router } from "express";
 import multer from "multer";
-import { parseLivroFiscal, parseApollo } from "../lib/parseArquivo.js";
-import { reconciliar } from "../lib/reconciliacao.js";
+import { parseApollo } from "../lib/parseArquivo.js";
+import { reconciliarContraApollo } from "../lib/notas-service.js";
+import type { NotaFiscal } from "@workspace/db/schema";
 
 const router = Router();
 
@@ -10,57 +11,92 @@ const upload = multer({
   limits: { fileSize: 50 * 1024 * 1024 },
 });
 
+function mapNota(n: NotaFiscal) {
+  return {
+    id: n.id,
+    numeroNota: String(n.numeroNota),
+    dataEmissao: n.dataEmissao
+      ? n.dataEmissao.toISOString().split("T")[0]!.split("-").reverse().join("/")
+      : "",
+    cnpj: n.cpfCnpjFormatado,
+    razaoSocial: n.nomePrestador,
+    status: n.situacaoPortal,
+    issRetido: n.retido === "Sim" ? "Sim" : "Não",
+    valorBase: parseFloat(n.valorBaseCalculo ?? "0"),
+    valorISS: parseFloat(n.valorImposto ?? "0"),
+  };
+}
+
+function mapDivergente(n: NotaFiscal) {
+  const valorBaseLF = parseFloat(n.valorBaseCalculo ?? "0");
+  const valorBaseApollo = parseFloat(n.valorApolloBase ?? "0");
+  const valorISSLF = parseFloat(n.valorImposto ?? "0");
+  const valorISSApollo = parseFloat(n.valorApolloIss ?? "0");
+  return {
+    id: n.id,
+    numeroNota: String(n.numeroNota),
+    cnpj: n.cpfCnpjFormatado,
+    razaoSocial: n.nomePrestador,
+    valorBaseLF,
+    valorBaseApollo,
+    difBase: Math.round(Math.abs(valorBaseLF - valorBaseApollo) * 100) / 100,
+    valorISSLF,
+    valorISSApollo,
+    difISS: Math.round(Math.abs(valorISSLF - valorISSApollo) * 100) / 100,
+  };
+}
+
+function mapOutroMunicipio(n: NotaFiscal) {
+  return {
+    id: n.id,
+    numeroNota: String(n.numeroNota),
+    dataEmissao: n.dataEmissao
+      ? n.dataEmissao.toISOString().split("T")[0]!.split("-").reverse().join("/")
+      : "",
+    cnpj: n.cpfCnpjFormatado,
+    razaoSocial: n.nomePrestador,
+    municipio: n.municipioIncidencia,
+    valorServico: parseFloat(n.valorServico ?? "0"),
+    chaveAcesso: n.chaveAcesso,
+  };
+}
+
 router.post(
   "/reconciliacao/processar",
-  upload.fields([
-    { name: "livroFiscal", maxCount: 1 },
-    { name: "apollo", maxCount: 1 },
-  ]),
+  upload.single("apollo"),
   async (req, res) => {
     try {
-      const files = req.files as Record<string, Express.Multer.File[]> | undefined;
-
-      if (!files?.["livroFiscal"]?.[0]) {
-        res.status(400).json({ erro: "Arquivo do Livro Fiscal não enviado." });
-        return;
-      }
-      if (!files?.["apollo"]?.[0]) {
+      const apolloFile = req.file;
+      if (!apolloFile) {
         res.status(400).json({ erro: "Arquivo do Relatório Apollo não enviado." });
         return;
       }
 
-      const livroFiscalFile = files["livroFiscal"][0];
-      const apolloFile = files["apollo"][0];
+      req.log.info({ apollo: apolloFile.originalname }, "Iniciando reconciliação com arquivo Apollo");
 
-      req.log.info(
-        { livroFiscal: livroFiscalFile.originalname, apollo: apolloFile.originalname },
-        "Iniciando processamento de reconciliação",
+      const notasApollo = await parseApollo(
+        apolloFile.buffer,
+        apolloFile.mimetype,
+        apolloFile.originalname,
       );
 
-      const [notasLF, notasApollo] = await Promise.all([
-        parseLivroFiscal(livroFiscalFile.buffer, livroFiscalFile.mimetype, livroFiscalFile.originalname),
-        parseApollo(apolloFile.buffer, apolloFile.mimetype, apolloFile.originalname),
-      ]);
+      req.log.info({ totalApollo: notasApollo.length }, "Apollo carregado, reconciliando contra banco");
 
-      if (notasLF.length === 0) {
-        res.status(400).json({
-          erro: "Nenhuma nota fiscal válida foi encontrada no Livro Fiscal após os filtros (ISS Retido = Sim, excluindo canceladas com ISS = 0). Verifique se o arquivo está correto.",
-        });
-        return;
-      }
+      const dashboard = await reconciliarContraApollo(notasApollo);
 
-      req.log.info(
-        { totalLivroFiscal: notasLF.length, totalApollo: notasApollo.length },
-        "Notas carregadas, iniciando reconciliação",
-      );
+      req.log.info(dashboard.resumo, "Reconciliação concluída");
 
-      const resultado = reconciliar(notasLF, notasApollo);
-
-      req.log.info(resultado.resumo, "Reconciliação concluída");
-
-      res.json(resultado);
+      res.json({
+        resumo: dashboard.resumo,
+        validadas: dashboard.validadas.map(mapNota),
+        faltantes: dashboard.faltantes.map(mapNota),
+        divergencias: dashboard.divergencias.map(mapDivergente),
+        canceladas: dashboard.canceladas.map(mapNota),
+        outrosMunicipios: dashboard.outrosMunicipios.map(mapOutroMunicipio),
+        ultimaAtualizacao: dashboard.ultimaAtualizacao,
+      });
     } catch (err) {
-      req.log.error({ err }, "Erro durante processamento de reconciliação");
+      req.log.error({ err }, "Erro durante reconciliação");
       res.status(400).json({
         erro: err instanceof Error ? err.message : "Erro ao processar os arquivos.",
       });

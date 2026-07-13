@@ -26,19 +26,8 @@ import {
 } from "@/components/ui/select";
 import { Search } from "lucide-react";
 
-interface NotaCancelada {
-  numeroNota: string;
-  dataEmissao: string;
-  cnpj: string;
-  razaoSocial: string;
-  valorBase: number;
-  valorISS: number;
-}
-
 interface ResultsDashboardProps {
-  results: ResultadoReconciliacao & {
-    canceladas?: NotaCancelada[];
-  };
+  results: ResultadoReconciliacao;
 }
 
 function formatCurrency(value: number) {
@@ -134,7 +123,7 @@ export function ResultsDashboard({ results }: ResultsDashboardProps) {
   const tudo_ok =
     resumo.totalFaltantes === 0 &&
     resumo.totalDivergencias === 0 &&
-    resumo.totalLivroFiscal > 0;
+    resumo.totalNotas > 0;
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-12">
@@ -143,7 +132,7 @@ export function ResultsDashboard({ results }: ResultsDashboardProps) {
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
         <SummaryCard
           title="Total Emitidas"
-          value={resumo.totalLivroFiscal}
+          value={resumo.totalNotas}
           className="border-border"
           valueColor="text-foreground"
         />

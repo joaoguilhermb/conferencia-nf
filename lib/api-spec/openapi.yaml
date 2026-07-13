@@ -1,6 +1,5 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
   description: API de Conferência de Notas Fiscais
@@ -12,6 +11,10 @@ tags:
     description: Health operations
   - name: reconciliacao
     description: Reconciliação de notas fiscais
+  - name: notas
+    description: Operações de Notas Fiscais e busca no portal
+  - name: dashboard
+    description: Visualização do estado atual do dashboard
 paths:
   /healthz:
     get:
@@ -27,21 +30,120 @@ paths:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
 
+  /notas/atualizar:
+    post:
+      operationId: atualizarNotas
+      tags: [notas]
+      summary: Buscar notas do portal e salvar/atualizar no banco
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                competencia:
+                  type: string
+                  enum: [mesAtual, mesAnterior]
+              required: [competencia]
+      responses:
+        "200":
+          description: Resultado da importação do portal
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalInseridas:
+                    type: integer
+                  totalAtualizadas:
+                    type: integer
+                  totalCanceladas:
+                    type: integer
+                required: [totalInseridas, totalAtualizadas, totalCanceladas]
+        "400":
+          description: Erro de validação ou processamento
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErroResposta"
+
+  /dashboard:
+    get:
+      operationId: getDashboard
+      tags: [dashboard]
+      summary: Obter dados consolidados do dashboard a partir do banco de dados
+      responses:
+        "200":
+          description: Estado atual da conciliação
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResultadoReconciliacao"
+
   /reconciliacao/processar:
     post:
       operationId: processarReconciliacao
       tags: [reconciliacao]
-      summary: Processar reconciliação de notas fiscais
-      description: Recebe os dois arquivos via multipart/form-data (livroFiscal e apollo) e retorna faltantes e divergências
+      summary: Reconciliar notas do banco de dados contra o arquivo Apollo
+      description: Recebe apenas o arquivo Apollo (multipart/form-data) e realiza a reconciliação contra todas as notas ativas no banco.
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                apollo:
+                  type: string
+                  format: binary
+              required:
+                - apollo
       responses:
         "200":
-          description: Resultado da reconciliação
+          description: Resultado atualizado da reconciliação
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ResultadoReconciliacao"
         "400":
-          description: Erro de validação
+          description: Erro de processamento ou validação
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErroResposta"
+
+  /notas/{id}/pdf:
+    post:
+      operationId: obterPdfNota
+      tags: [notas]
+      summary: Obter o PDF de uma NFS-e do portal ou o link de consulta externa
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID da nota no banco de dados
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: PDF retornado com sucesso ou URL externa de outros municípios
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url:
+                    type: string
+                  tipo:
+                    type: string
+                    enum: [pdf, linkExterno]
+                required: [url, tipo]
+        "400":
+          description: Erro ao obter nota ou PDF
           content:
             application/json:
               schema:
@@ -67,15 +169,21 @@ components:
 
     NotaFaltante:
       type: object
-      description: Nota presente no Livro Fiscal mas não localizada no Apollo
+      description: Nota presente no portal da Prefeitura mas não localizada no Apollo
       properties:
+        id:
+          type: integer
         numeroNota:
           type: string
         dataEmissao:
           type: string
         cnpj:
           type: string
+        razaoSocial:
+          type: string
         status:
+          type: string
+        issRetido:
           type: string
         valorBase:
           type: number
@@ -91,11 +199,15 @@ components:
 
     NotaDivergente:
       type: object
-      description: Nota presente nos dois arquivos mas com divergência de valor maior que R$0,05
+      description: Nota presente nos dois registros mas com divergência de valores
       properties:
+        id:
+          type: integer
         numeroNota:
           type: string
         cnpj:
+          type: string
+        razaoSocial:
           type: string
         valorBaseLF:
           type: number
@@ -119,19 +231,127 @@ components:
         - valorISSApollo
         - difISS
 
+    NotaValidada:
+      type: object
+      description: Nota presente no portal e no Apollo sem divergência
+      properties:
+        id:
+          type: integer
+        numeroNota:
+          type: string
+        dataEmissao:
+          type: string
+        cnpj:
+          type: string
+        razaoSocial:
+          type: string
+        status:
+          type: string
+        issRetido:
+          type: string
+        valorBase:
+          type: number
+        valorISS:
+          type: number
+      required:
+        - numeroNota
+        - dataEmissao
+        - cnpj
+        - status
+        - valorBase
+        - valorISS
+
+    NotaCancelada:
+      type: object
+      description: Nota cancelada pela Prefeitura
+      properties:
+        id:
+          type: integer
+        numeroNota:
+          type: string
+        dataEmissao:
+          type: string
+        cnpj:
+          type: string
+        razaoSocial:
+          type: string
+        status:
+          type: string
+        valorBase:
+          type: number
+        valorISS:
+          type: number
+      required:
+        - numeroNota
+        - dataEmissao
+        - cnpj
+        - status
+        - valorBase
+        - valorISS
+
+    NotaOutroMunicipio:
+      type: object
+      description: Nota de outro município (MunicipioIncidencia diferente de RONDONÓPOLIS/MT)
+      properties:
+        id:
+          type: integer
+        numeroNota:
+          type: string
+        dataEmissao:
+          type: string
+        cnpj:
+          type: string
+        razaoSocial:
+          type: string
+        municipio:
+          type: string
+        valorServico:
+          type: number
+        chaveAcesso:
+          type: string
+      required:
+        - numeroNota
+        - dataEmissao
+        - cnpj
+        - razaoSocial
+        - municipio
+        - valorServico
+        - chaveAcesso
+
     ResumoReconciliacao:
       type: object
       properties:
-        totalLivroFiscal:
+        totalNotas:
+          type: integer
+        totalValidadas:
           type: integer
         totalFaltantes:
           type: integer
         totalDivergencias:
           type: integer
+        totalCanceladas:
+          type: integer
+        totalOutrosMunicipios:
+          type: integer
+        valorTotalValidadas:
+          type: number
+        valorTotalFaltantes:
+          type: number
+        valorTotalCanceladas:
+          type: number
+        valorTotalOutrosMunicipios:
+          type: number
       required:
-        - totalLivroFiscal
+        - totalNotas
+        - totalValidadas
         - totalFaltantes
         - totalDivergencias
+        - totalCanceladas
+        - totalOutrosMunicipios
+        - valorTotalValidadas
+        - valorTotalFaltantes
+        - valorTotalCanceladas
+        - valorTotalOutrosMunicipios
 
     ResultadoReconciliacao:
       type: object
@@ -146,7 +366,25 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/NotaDivergente"
+        validadas:
+          type: array
+          items:
+            $ref: "#/components/schemas/NotaValidada"
+        canceladas:
+          type: array
+          items:
+            $ref: "#/components/schemas/NotaCancelada"
+        outrosMunicipios:
+          type: array
+          items:
+            $ref: "#/components/schemas/NotaOutroMunicipio"
+        ultimaAtualizacao:
+          type: string
+          nullable: true
       required:
         - resumo
         - faltantes
         - divergencias
+        - validadas
+        - canceladas
+        - outrosMunicipios

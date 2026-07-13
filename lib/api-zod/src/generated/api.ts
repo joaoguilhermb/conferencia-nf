@@ -7,7 +7,6 @@
  */
 import * as zod from 'zod';
 
-
 /**
  * Returns server health status
  * @summary Health check
@@ -18,33 +17,180 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
- * Recebe os dois arquivos via multipart/form-data (livroFiscal e apollo) e retorna faltantes e divergências
- * @summary Processar reconciliação de notas fiscais
+ * @summary Buscar notas do portal e salvar/atualizar no banco
  */
-export const ProcessarReconciliacaoResponse = zod.object({
+export const AtualizarNotasBody = zod.object({
+  "competencia": zod.enum(['mesAtual', 'mesAnterior'])
+})
+
+export const AtualizarNotasResponse = zod.object({
+  "totalInseridas": zod.number(),
+  "totalAtualizadas": zod.number(),
+  "totalCanceladas": zod.number()
+})
+
+
+/**
+ * @summary Obter dados consolidados do dashboard a partir do banco de dados
+ */
+export const GetDashboardResponse = zod.object({
   "resumo": zod.object({
-  "totalLivroFiscal": zod.number(),
+  "totalNotas": zod.number(),
+  "totalValidadas": zod.number(),
   "totalFaltantes": zod.number(),
-  "totalDivergencias": zod.number()
+  "totalDivergencias": zod.number(),
+  "totalCanceladas": zod.number(),
+  "totalOutrosMunicipios": zod.number(),
+  "valorTotalValidadas": zod.number(),
+  "valorTotalFaltantes": zod.number(),
+  "valorTotalCanceladas": zod.number(),
+  "valorTotalOutrosMunicipios": zod.number()
 }),
   "faltantes": zod.array(zod.object({
+  "id": zod.number().optional(),
   "numeroNota": zod.string(),
   "dataEmissao": zod.string(),
   "cnpj": zod.string(),
+  "razaoSocial": zod.string().optional(),
   "status": zod.string(),
+  "issRetido": zod.string().optional(),
   "valorBase": zod.number(),
   "valorISS": zod.number()
-}).describe('Nota presente no Livro Fiscal mas não localizada no Apollo')),
+}).describe('Nota presente no portal da Prefeitura mas não localizada no Apollo')),
   "divergencias": zod.array(zod.object({
+  "id": zod.number().optional(),
   "numeroNota": zod.string(),
   "cnpj": zod.string(),
+  "razaoSocial": zod.string().optional(),
   "valorBaseLF": zod.number(),
   "valorBaseApollo": zod.number(),
   "difBase": zod.number(),
   "valorISSLF": zod.number(),
   "valorISSApollo": zod.number(),
   "difISS": zod.number()
-}).describe('Nota presente nos dois arquivos mas com divergência de valor maior que R$0,05'))
+}).describe('Nota presente nos dois registros mas com divergência de valores')),
+  "validadas": zod.array(zod.object({
+  "id": zod.number().optional(),
+  "numeroNota": zod.string(),
+  "dataEmissao": zod.string(),
+  "cnpj": zod.string(),
+  "razaoSocial": zod.string().optional(),
+  "status": zod.string(),
+  "issRetido": zod.string().optional(),
+  "valorBase": zod.number(),
+  "valorISS": zod.number()
+}).describe('Nota presente no portal e no Apollo sem divergência')),
+  "canceladas": zod.array(zod.object({
+  "id": zod.number().optional(),
+  "numeroNota": zod.string(),
+  "dataEmissao": zod.string(),
+  "cnpj": zod.string(),
+  "razaoSocial": zod.string().optional(),
+  "status": zod.string(),
+  "valorBase": zod.number(),
+  "valorISS": zod.number()
+}).describe('Nota cancelada pela Prefeitura')),
+  "outrosMunicipios": zod.array(zod.object({
+  "id": zod.number().optional(),
+  "numeroNota": zod.string(),
+  "dataEmissao": zod.string(),
+  "cnpj": zod.string(),
+  "razaoSocial": zod.string(),
+  "municipio": zod.string(),
+  "valorServico": zod.number(),
+  "chaveAcesso": zod.string()
+}).describe('Nota de outro município (MunicipioIncidencia diferente de RONDONÓPOLIS\/MT)')),
+  "ultimaAtualizacao": zod.string().nullish()
 })
 
 
+/**
+ * Recebe apenas o arquivo Apollo (multipart/form-data) e realiza a reconciliação contra todas as notas ativas no banco.
+ * @summary Reconciliar notas do banco de dados contra o arquivo Apollo
+ */
+export const ProcessarReconciliacaoBody = zod.object({
+  "apollo": zod.instanceof(File)
+})
+
+export const ProcessarReconciliacaoResponse = zod.object({
+  "resumo": zod.object({
+  "totalNotas": zod.number(),
+  "totalValidadas": zod.number(),
+  "totalFaltantes": zod.number(),
+  "totalDivergencias": zod.number(),
+  "totalCanceladas": zod.number(),
+  "totalOutrosMunicipios": zod.number(),
+  "valorTotalValidadas": zod.number(),
+  "valorTotalFaltantes": zod.number(),
+  "valorTotalCanceladas": zod.number(),
+  "valorTotalOutrosMunicipios": zod.number()
+}),
+  "faltantes": zod.array(zod.object({
+  "id": zod.number().optional(),
+  "numeroNota": zod.string(),
+  "dataEmissao": zod.string(),
+  "cnpj": zod.string(),
+  "razaoSocial": zod.string().optional(),
+  "status": zod.string(),
+  "issRetido": zod.string().optional(),
+  "valorBase": zod.number(),
+  "valorISS": zod.number()
+}).describe('Nota presente no portal da Prefeitura mas não localizada no Apollo')),
+  "divergencias": zod.array(zod.object({
+  "id": zod.number().optional(),
+  "numeroNota": zod.string(),
+  "cnpj": zod.string(),
+  "razaoSocial": zod.string().optional(),
+  "valorBaseLF": zod.number(),
+  "valorBaseApollo": zod.number(),
+  "difBase": zod.number(),
+  "valorISSLF": zod.number(),
+  "valorISSApollo": zod.number(),
+  "difISS": zod.number()
+}).describe('Nota presente nos dois registros mas com divergência de valores')),
+  "validadas": zod.array(zod.object({
+  "id": zod.number().optional(),
+  "numeroNota": zod.string(),
+  "dataEmissao": zod.string(),
+  "cnpj": zod.string(),
+  "razaoSocial": zod.string().optional(),
+  "status": zod.string(),
+  "issRetido": zod.string().optional(),
+  "valorBase": zod.number(),
+  "valorISS": zod.number()
+}).describe('Nota presente no portal e no Apollo sem divergência')),
+  "canceladas": zod.array(zod.object({
+  "id": zod.number().optional(),
+  "numeroNota": zod.string(),
+  "dataEmissao": zod.string(),
+  "cnpj": zod.string(),
+  "razaoSocial": zod.string().optional(),
+  "status": zod.string(),
+  "valorBase": zod.number(),
+  "valorISS": zod.number()
+}).describe('Nota cancelada pela Prefeitura')),
+  "outrosMunicipios": zod.array(zod.object({
+  "id": zod.number().optional(),
+  "numeroNota": zod.string(),
+  "dataEmissao": zod.string(),
+  "cnpj": zod.string(),
+  "razaoSocial": zod.string(),
+  "municipio": zod.string(),
+  "valorServico": zod.number(),
+  "chaveAcesso": zod.string()
+}).describe('Nota de outro município (MunicipioIncidencia diferente de RONDONÓPOLIS\/MT)')),
+  "ultimaAtualizacao": zod.string().nullish()
+})
+
+
+/**
+ * @summary Obter o PDF de uma NFS-e do portal ou o link de consulta externa
+ */
+export const ObterPdfNotaParams = zod.object({
+  "id": zod.coerce.number().describe('ID da nota no banco de dados')
+})
+
+export const ObterPdfNotaResponse = zod.object({
+  "url": zod.string(),
+  "tipo": zod.enum(['pdf', 'linkExterno'])
+})

@@ -14,23 +14,28 @@ export interface ErroResposta {
 }
 
 /**
- * Nota presente no Livro Fiscal mas não localizada no Apollo
+ * Nota presente no portal da Prefeitura mas não localizada no Apollo
  */
 export interface NotaFaltante {
+  id?: number;
   numeroNota: string;
   dataEmissao: string;
   cnpj: string;
+  razaoSocial?: string;
   status: string;
+  issRetido?: string;
   valorBase: number;
   valorISS: number;
 }
 
 /**
- * Nota presente nos dois arquivos mas com divergência de valor maior que R$0,05
+ * Nota presente nos dois registros mas com divergência de valores
  */
 export interface NotaDivergente {
+  id?: number;
   numeroNota: string;
   cnpj: string;
+  razaoSocial?: string;
   valorBaseLF: number;
   valorBaseApollo: number;
   difBase: number;
@@ -39,15 +44,104 @@ export interface NotaDivergente {
   difISS: number;
 }
 
+/**
+ * Nota presente no portal e no Apollo sem divergência
+ */
+export interface NotaValidada {
+  id?: number;
+  numeroNota: string;
+  dataEmissao: string;
+  cnpj: string;
+  razaoSocial?: string;
+  status: string;
+  issRetido?: string;
+  valorBase: number;
+  valorISS: number;
+}
+
+/**
+ * Nota cancelada pela Prefeitura
+ */
+export interface NotaCancelada {
+  id?: number;
+  numeroNota: string;
+  dataEmissao: string;
+  cnpj: string;
+  razaoSocial?: string;
+  status: string;
+  valorBase: number;
+  valorISS: number;
+}
+
+/**
+ * Nota de outro município (MunicipioIncidencia diferente de RONDONÓPOLIS/MT)
+ */
+export interface NotaOutroMunicipio {
+  id?: number;
+  numeroNota: string;
+  dataEmissao: string;
+  cnpj: string;
+  razaoSocial: string;
+  municipio: string;
+  valorServico: number;
+  chaveAcesso: string;
+}
+
 export interface ResumoReconciliacao {
-  totalLivroFiscal: number;
+  totalNotas: number;
+  totalValidadas: number;
   totalFaltantes: number;
   totalDivergencias: number;
+  totalCanceladas: number;
+  totalOutrosMunicipios: number;
+  valorTotalValidadas: number;
+  valorTotalFaltantes: number;
+  valorTotalCanceladas: number;
+  valorTotalOutrosMunicipios: number;
 }
 
 export interface ResultadoReconciliacao {
   resumo: ResumoReconciliacao;
   faltantes: NotaFaltante[];
   divergencias: NotaDivergente[];
+  validadas: NotaValidada[];
+  canceladas: NotaCancelada[];
+  outrosMunicipios: NotaOutroMunicipio[];
+  ultimaAtualizacao?: string | null;
 }
+
+export type AtualizarNotasBodyCompetencia = typeof AtualizarNotasBodyCompetencia[keyof typeof AtualizarNotasBodyCompetencia];
+
+
+export const AtualizarNotasBodyCompetencia = {
+  mesAtual: 'mesAtual',
+  mesAnterior: 'mesAnterior',
+} as const;
+
+export type AtualizarNotasBody = {
+  competencia: AtualizarNotasBodyCompetencia;
+};
+
+export type AtualizarNotas200 = {
+  totalInseridas: number;
+  totalAtualizadas: number;
+  totalCanceladas: number;
+};
+
+export type ProcessarReconciliacaoBody = {
+  apollo: Blob;
+};
+
+export type ObterPdfNota200TwoTipo = typeof ObterPdfNota200TwoTipo[keyof typeof ObterPdfNota200TwoTipo];
+
+
+export const ObterPdfNota200TwoTipo = {
+  pdf: 'pdf',
+  linkExterno: 'linkExterno',
+} as const;
+
+export type ObterPdfNota200Two = {
+  url: string;
+  tipo: ObterPdfNota200TwoTipo;
+};
 

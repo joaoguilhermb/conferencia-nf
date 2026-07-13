@@ -20,13 +20,17 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AtualizarNotas200,
+  AtualizarNotasBody,
   ErroResposta,
   HealthStatus,
+  ObterPdfNota200Two,
+  ProcessarReconciliacaoBody,
   ResultadoReconciliacao
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
-import type { ErrorType } from '../custom-fetch';
+import type { ErrorType , BodyType } from '../custom-fetch';
 
 type AwaitedInput<T> = PromiseLike<T> | T;
 
@@ -115,6 +119,154 @@ export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, 
 
 
 
+export const getAtualizarNotasUrl = () => {
+
+
+
+
+  return `/api/notas/atualizar`
+}
+
+/**
+ * @summary Buscar notas do portal e salvar/atualizar no banco
+ */
+export const atualizarNotas = async (atualizarNotasBody: AtualizarNotasBody, options?: RequestInit): Promise<AtualizarNotas200> => {
+
+  return customFetch<AtualizarNotas200>(getAtualizarNotasUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      atualizarNotasBody,)
+  }
+);}
+
+
+
+
+export const getAtualizarNotasMutationOptions = <TError = ErrorType<ErroResposta>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof atualizarNotas>>, TError,{data: BodyType<AtualizarNotasBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof atualizarNotas>>, TError,{data: BodyType<AtualizarNotasBody>}, TContext> => {
+
+const mutationKey = ['atualizarNotas'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof atualizarNotas>>, {data: BodyType<AtualizarNotasBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  atualizarNotas(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AtualizarNotasMutationResult = NonNullable<Awaited<ReturnType<typeof atualizarNotas>>>
+    export type AtualizarNotasMutationBody = BodyType<AtualizarNotasBody>
+    export type AtualizarNotasMutationError = ErrorType<ErroResposta>
+
+    /**
+ * @summary Buscar notas do portal e salvar/atualizar no banco
+ */
+export const useAtualizarNotas = <TError = ErrorType<ErroResposta>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof atualizarNotas>>, TError,{data: BodyType<AtualizarNotasBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof atualizarNotas>>,
+        TError,
+        {data: BodyType<AtualizarNotasBody>},
+        TContext
+      > => {
+      return useMutation(getAtualizarNotasMutationOptions(options));
+    }
+
+export const getGetDashboardUrl = () => {
+
+
+
+
+  return `/api/dashboard`
+}
+
+/**
+ * @summary Obter dados consolidados do dashboard a partir do banco de dados
+ */
+export const getDashboard = async ( options?: RequestInit): Promise<ResultadoReconciliacao> => {
+
+  return customFetch<ResultadoReconciliacao>(getGetDashboardUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetDashboardQueryKey = () => {
+    return [
+    `/api/dashboard`
+    ] as const;
+    }
+
+
+export const getGetDashboardQueryOptions = <TData = Awaited<ReturnType<typeof getDashboard>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDashboard>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetDashboardQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDashboard>>> = ({ signal }) => getDashboard({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDashboard>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetDashboardQueryResult = NonNullable<Awaited<ReturnType<typeof getDashboard>>>
+export type GetDashboardQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Obter dados consolidados do dashboard a partir do banco de dados
+ */
+
+export function useGetDashboard<TData = Awaited<ReturnType<typeof getDashboard>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDashboard>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetDashboardQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
 export const getProcessarReconciliacaoUrl = () => {
 
 
@@ -124,17 +276,22 @@ export const getProcessarReconciliacaoUrl = () => {
 }
 
 /**
- * Recebe os dois arquivos via multipart/form-data (livroFiscal e apollo) e retorna faltantes e divergências
- * @summary Processar reconciliação de notas fiscais
+ * Recebe apenas o arquivo Apollo (multipart/form-data) e realiza a reconciliação contra todas as notas ativas no banco.
+ * @summary Reconciliar notas do banco de dados contra o arquivo Apollo
  */
-export const processarReconciliacao = async ( options?: RequestInit): Promise<ResultadoReconciliacao> => {
+export const processarReconciliacao = async (processarReconciliacaoBody?: ProcessarReconciliacaoBody, options?: RequestInit): Promise<ResultadoReconciliacao> => {
+    const formData = new FormData();
+if(processarReconciliacaoBody?.apollo !== undefined) {
+ formData.append(`apollo`, processarReconciliacaoBody.apollo);
+ }
 
   return customFetch<ResultadoReconciliacao>(getProcessarReconciliacaoUrl(),
   {
     ...options,
     method: 'POST'
-
-
+    ,
+    body:
+      formData,
   }
 );}
 
@@ -142,8 +299,8 @@ export const processarReconciliacao = async ( options?: RequestInit): Promise<Re
 
 
 export const getProcessarReconciliacaoMutationOptions = <TError = ErrorType<ErroResposta>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof processarReconciliacao>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof processarReconciliacao>>, TError,void, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof processarReconciliacao>>, TError,{data?: BodyType<ProcessarReconciliacaoBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof processarReconciliacao>>, TError,{data?: BodyType<ProcessarReconciliacaoBody>}, TContext> => {
 
 const mutationKey = ['processarReconciliacao'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -155,10 +312,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof processarReconciliacao>>, void> = () => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof processarReconciliacao>>, {data?: BodyType<ProcessarReconciliacaoBody>}> = (props) => {
+          const {data} = props ?? {};
 
-
-          return  processarReconciliacao(requestOptions)
+          return  processarReconciliacao(data,requestOptions)
         }
 
 
@@ -169,20 +326,90 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type ProcessarReconciliacaoMutationResult = NonNullable<Awaited<ReturnType<typeof processarReconciliacao>>>
-
+    export type ProcessarReconciliacaoMutationBody = BodyType<ProcessarReconciliacaoBody> | undefined
     export type ProcessarReconciliacaoMutationError = ErrorType<ErroResposta>
 
     /**
- * @summary Processar reconciliação de notas fiscais
+ * @summary Reconciliar notas do banco de dados contra o arquivo Apollo
  */
 export const useProcessarReconciliacao = <TError = ErrorType<ErroResposta>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof processarReconciliacao>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof processarReconciliacao>>, TError,{data?: BodyType<ProcessarReconciliacaoBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof processarReconciliacao>>,
         TError,
-        void,
+        {data?: BodyType<ProcessarReconciliacaoBody>},
         TContext
       > => {
       return useMutation(getProcessarReconciliacaoMutationOptions(options));
+    }
+
+export const getObterPdfNotaUrl = (id: number,) => {
+
+
+
+
+  return `/api/notas/${id}/pdf`
+}
+
+/**
+ * @summary Obter o PDF de uma NFS-e do portal ou o link de consulta externa
+ */
+export const obterPdfNota = async (id: number, options?: RequestInit): Promise<Blob | ObterPdfNota200Two> => {
+
+  return customFetch<Blob | ObterPdfNota200Two>(getObterPdfNotaUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getObterPdfNotaMutationOptions = <TError = ErrorType<ErroResposta>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof obterPdfNota>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof obterPdfNota>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['obterPdfNota'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof obterPdfNota>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  obterPdfNota(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ObterPdfNotaMutationResult = NonNullable<Awaited<ReturnType<typeof obterPdfNota>>>
+
+    export type ObterPdfNotaMutationError = ErrorType<ErroResposta>
+
+    /**
+ * @summary Obter o PDF de uma NFS-e do portal ou o link de consulta externa
+ */
+export const useObterPdfNota = <TError = ErrorType<ErroResposta>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof obterPdfNota>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof obterPdfNota>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getObterPdfNotaMutationOptions(options));
     }
 
