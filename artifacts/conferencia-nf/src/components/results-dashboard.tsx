@@ -70,33 +70,34 @@ function PdfButton({ notaId, numeroNota }: { notaId?: number; numeroNota: string
     setErro(null);
     try {
       const res = await fetch(`/api/notas/${notaId}/pdf`, { method: "POST" });
-      const contentType = res.headers.get("content-type") ?? "";
+
+      // O backend agora SEMPRE responde em JSON (nunca manda PDF binário
+      // direto) — o campo "tipo" diz o que fazer com a resposta.
+      const data = (await res.json().catch(() => ({}))) as {
+        html?: string;
+        url?: string;
+        tipo?: string;
+        erro?: string;
+      };
 
       if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error((errData as { erro?: string }).erro ?? `Erro HTTP ${res.status}`);
+        throw new Error(data.erro ?? `Erro HTTP ${res.status}`);
       }
 
-      if (contentType.includes("application/pdf")) {
-        // Resposta é um blob PDF — dispara download automático
-        const blob = await res.blob();
+      if (data.tipo === "html" && data.html) {
+        // HTML da visualização da nota — abre numa aba nova.
+        // O usuário usa o Ctrl+P do navegador ali dentro pra salvar como PDF.
+        const blob = new Blob([data.html], { type: "text/html" });
         const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `nf-${numeroNota}.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
+        window.open(url, "_blank", "noopener,noreferrer");
         setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      } else if (data.tipo === "linkExterno" && data.url) {
+        window.open(data.url, "_blank", "noopener,noreferrer");
       } else {
-        // Resposta é JSON com URL externa
-        const data = (await res.json()) as { url?: string; tipo?: string };
-        if (data.url) {
-          window.open(data.url, "_blank", "noopener,noreferrer");
-        }
+        throw new Error("Resposta inesperada do servidor.");
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Erro ao obter PDF.";
+      const msg = err instanceof Error ? err.message : "Erro ao obter visualização da nota.";
       setErro(msg);
       // Limpa o erro após 4 segundos
       setTimeout(() => setErro(null), 4000);
@@ -480,7 +481,7 @@ export function ResultsDashboard({ results }: ResultsDashboardProps) {
             </CardContent>
           </Card>
         )}
-        
+
         {/* Tabela: Validadas */}
         {(filtro === "ALL" || filtro === "VALIDADA") && (
           <Card className="border-l-4 border-l-green-500 shadow-md">

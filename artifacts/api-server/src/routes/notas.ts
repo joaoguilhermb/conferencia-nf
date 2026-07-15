@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { buscarNotasPortal, obterPdfNota, urlConsultaPublica } from "../portal-automation/portal-api.js";
+import { buscarNotasPortal, obterHtmlNota, urlConsultaPublica } from "../portal-automation/portal-api.js";
 import { upsertNotasPortal } from "../lib/notas-service.js";
 import { db } from "@workspace/db";
 import { notasFiscaisTable } from "@workspace/db/schema";
@@ -58,25 +58,23 @@ router.post("/notas/:id/pdf", async (req, res) => {
     return;
   }
 
-  // Nota de Rondonópolis: tenta obter PDF via portal
+  // Nota de Rondonópolis: monta o HTML de visualização via portal.
+  // Não é um PDF de verdade — é o mesmo HTML que o Viewer do portal usa pra
+  // exibir a nota. O frontend abre isso numa aba nova e o usuário usa o
+  // Ctrl+P do navegador pra salvar como PDF, se quiser.
   try {
-    const pdfBuffer = await obterPdfNota(nota.idPortal, nota.chaveAcesso);
-    if (pdfBuffer) {
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader(
-        "Content-Disposition",
-        `inline; filename="nf-${nota.numeroNota}.pdf"`,
-      );
-      res.send(pdfBuffer);
+    const html = await obterHtmlNota(nota.idPortal);
+    if (html) {
+      res.json({ html, tipo: "html" });
     } else {
-      // Fallback: return the public URL if PDF retrieval failed
+      // Fallback: retorna o link público se não conseguiu montar o HTML
       const url = `https://nfse.rondonopolis.mt.gov.br/NFSe/DocumentosFiscais/NotasFiscaisEletronicas?chave=${nota.chaveAcesso}`;
       res.json({ url, tipo: "linkExterno" });
     }
   } catch (err) {
-    req.log.error({ err, id }, "Erro ao obter PDF da nota");
+    req.log.error({ err, id }, "Erro ao obter visualização da nota");
     res.status(400).json({
-      erro: err instanceof Error ? err.message : "Erro ao obter PDF.",
+      erro: err instanceof Error ? err.message : "Erro ao obter visualização da nota.",
     });
   }
 });
