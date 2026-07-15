@@ -6,7 +6,9 @@
     "preinstall": "node -e \"if(process.env.npm_config_user_agent && !process.env.npm_config_user_agent.startsWith('pnpm')) { console.error('Use pnpm instead'); process.exit(1); }\"",
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
     "typecheck:libs": "tsc --build",
-    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
+    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
+    "render:build": "cross-env PORT=10000 BASE_PATH=/ pnpm --filter @workspace/conferencia-nf run build && pnpm --filter @workspace/api-server run build",
+    "render:start": "node --enable-source-maps artifacts/api-server/dist/index.mjs"
   },
   "private": true,
   "devDependencies": {

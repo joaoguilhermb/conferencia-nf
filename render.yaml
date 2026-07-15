@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: conferencia-nf
+    runtime: node
+    region: oregon
+
+    # Install dependencies (--prod=false ensures devDeps needed for the build are included)
+    buildCommand: pnpm install --frozen-lockfile --prod=false && pnpm run render:build
+
+    # Start the Express server (serves /api/* AND the Vite frontend statics)
+    startCommand: pnpm run render:start
+
+    # Environment variables – set their values in the Render dashboard
+    # (never commit secrets to this file)
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "10000"           # Render assigns this automatically; keep in sync
+      - key: DATABASE_URL
+        sync: false              # Set in the Render dashboard
+      - key: AGILIS_BLUE_CNPJ
+        sync: false
+      - key: AGILIS_BLUE_SENHA
+        sync: false

@@ -31,4 +31,12 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
 
+// In production the Express server serves the Vite build and falls back to
+// index.html for client-side routing. This block must come AFTER all API
+// routes so that /api/* is never intercepted by the static middleware.
+if (process.env["NODE_ENV"] === "production") {
+  const { serveStatic } = await import("./static.js");
+  serveStatic(app);
+}
+
 export default app;
