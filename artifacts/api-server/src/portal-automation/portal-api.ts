@@ -5,55 +5,53 @@ import type { NotaPortal, Competencia } from "./portal-types.js";
 const PORTAL_BASE = "https://nfse.rondonopolis.mt.gov.br";
 const GRID_URL = `${PORTAL_BASE}/NFSe/DocumentosFiscais/EmissaoLivroFiscal/GetDocumentosFiscaisGrid`;
 
-// PDF report endpoints (Stimulsoft-based)
+// Endpoints do relatório em PDF (Stimulsoft) — mantidos como estavam, ainda
+// NÃO validados contra o portal real. Tratar com desconfiança até testar.
 const PDF_SNAPSHOT_URL = `${PORTAL_BASE}/NFSe/DocumentosFiscais/NotasFiscaisEletronicas/AglReportGetReportSnapshotHtml`;
 const PDF_INIT_URL = `${PORTAL_BASE}/NFSe/DocumentosFiscais/NotasFiscaisEletronicas/AglReportInitVars`;
 const PDF_EXPORT_URL = `${PORTAL_BASE}/NFSe/DocumentosFiscais/NotasFiscaisEletronicas/AglReportExportReportViewHtml`;
 
-function calcularIntervalo(competencia: Competencia): { dataInicial: string; dataFinal: string } {
-  const hoje = new Date();
-  const ano = hoje.getFullYear();
-  const mes = hoje.getMonth(); // 0-indexed
-
-  if (competencia === "mesAtual") {
-    const dataInicial = `${String(1).padStart(2, "0")}/${String(mes + 1).padStart(2, "0")}/${ano}`;
-    const dataFinal = `${String(hoje.getDate()).padStart(2, "0")}/${String(mes + 1).padStart(2, "0")}/${ano}`;
-    return { dataInicial, dataFinal };
-  } else {
-    // Mês anterior
-    const primeiroDiaMesAtual = new Date(ano, mes, 1);
-    const ultimoDiaMesAnterior = new Date(primeiroDiaMesAtual.getTime() - 1);
-    const anoAnt = ultimoDiaMesAnterior.getFullYear();
-    const mesAnt = ultimoDiaMesAnterior.getMonth() + 1;
-    const ultimoDia = ultimoDiaMesAnterior.getDate();
-    const dataInicial = `01/${String(mesAnt).padStart(2, "0")}/${anoAnt}`;
-    const dataFinal = `${String(ultimoDia).padStart(2, "0")}/${String(mesAnt).padStart(2, "0")}/${anoAnt}`;
-    return { dataInicial, dataFinal };
-  }
-}
-
 /**
- * Fetch all NFS-e from the portal for a given competência.
- * Handles pagination automatically.
+ * Busca todas as NFS-e do portal pra uma competência ("mesAtual" ou
+ * "mesAnterior"), paginando automaticamente.
+ *
+ * Filtro de período: NÃO usa DataInicial/DataFinal (vieram sempre vazios em
+ * toda captura de HAR analisada). O filtro real é feito selecionando o
+ * IdCompetenciaEconomico certo, resolvido por portalSession.getIdCompetencia().
+ *
+ * Paginação: o campo "Total" que o portal retorna veio -1 em toda captura
+ * (não confiável). O critério de parada é: página trouxe menos itens que o
+ * "limit" pedido = chegou na última página.
  */
 export async function buscarNotasPortal(competencia: Competencia): Promise<NotaPortal[]> {
-  const { dataInicial, dataFinal } = calcularIntervalo(competencia);
-  logger.info({ competencia, dataInicial, dataFinal }, "Buscando notas no portal");
+  await portalSession.ensureSession();
+  const idEconomico = portalSession.getIdEconomico();
+  const idCompetenciaEconomico = await portalSession.getIdCompetencia(competencia);
 
-  const pageSize = 100;
+  logger.info({ competencia, idEconomico, idCompetenciaEconomico }, "Buscando notas no portal");
+
+  const limit = 100;
   const allNotas: NotaPortal[] = [];
   let page = 1;
 
   while (true) {
+    const values = {
+      Tipo: -2,
+      IdPessoaContribuinte: "",
+      IdEconomico: idEconomico,
+      MostrarNomeTomador: -1,
+      TipoDocumentoLivro: -3,
+      TipoImpressaoAtividadeEconomica: -3,
+      DataInicial: "",
+      DataFinal: "",
+      IdCompetenciaEconomico: idCompetenciaEconomico,
+    };
+
     const body = new URLSearchParams({
-      "tipoDocumento": "Tomado",
-      "dataInicial": dataInicial,
-      "dataFinal": dataFinal,
-      "page": String(page),
-      "pageSize": String(pageSize),
-      "sort": "",
-      "group": "",
-      "filter": "",
+      values: JSON.stringify(values),
+      page: String(page),
+      start: String((page - 1) * limit),
+      limit: String(limit),
     });
 
     let res: Response;
@@ -61,37 +59,34 @@ export async function buscarNotasPortal(competencia: Competencia): Promise<NotaP
       res = await portalSession.fetch(GRID_URL, {
         method: "POST",
         headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
+          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+          "X-Requested-With": "XMLHttpRequest",
           Referer: `${PORTAL_BASE}/NFSe/DocumentosFiscais/EmissaoLivroFiscal`,
         },
         body: body.toString(),
       });
     } catch (err) {
-      throw new Error(
-        `Falha ao comunicar com o portal: ${err instanceof Error ? err.message : String(err)}`,
-      );
+      throw new Error(`Falha ao comunicar com o portal: ${err instanceof Error ? err.message : String(err)}`);
     }
 
-    if (!res.ok && res.status !== 200) {
+    if (!res.ok) {
       throw new Error(`Portal retornou status inesperado: ${res.status}`);
     }
 
-    let json: { Data?: NotaPortal[]; Total?: number } | null = null;
+    let json: { Dados?: NotaPortal[]; Total?: number } | null = null;
     try {
       json = await res.json();
     } catch {
-      throw new Error("Portal retornou resposta não-JSON. Possível mudança de layout ou sessão inválida.");
+      throw new Error("Portal retornou resposta não-JSON. Possível sessão inválida ou mudança de layout.");
     }
 
-    const notas: NotaPortal[] = json?.Data ?? [];
-    const total: number = json?.Total ?? 0;
-
+    const notas: NotaPortal[] = json?.Dados ?? [];
     if (notas.length === 0) break;
 
     allNotas.push(...notas);
-    logger.info({ page, fetched: notas.length, total, accumulated: allNotas.length }, "Página de notas recebida");
+    logger.info({ page, fetched: notas.length, accumulated: allNotas.length }, "Página de notas recebida");
 
-    if (allNotas.length >= total) break;
+    if (notas.length < limit) break;
     page++;
   }
 
@@ -99,15 +94,11 @@ export async function buscarNotasPortal(competencia: Competencia): Promise<NotaP
   return allNotas;
 }
 
-/**
- * Try to obtain the PDF bytes for a nota from Rondonópolis.
- * Returns null if the report endpoint is not reachable.
- */
+/** Ainda não validado contra o portal real — ver "on the horizon" no contexto do projeto. */
 export async function obterPdfNota(idPortal: number, chaveAcesso: string): Promise<Buffer | null> {
   logger.info({ idPortal }, "Solicitando PDF da nota fiscal");
 
   try {
-    // Step 1: get report snapshot (initializes the Stimulsoft report session)
     const snapshotRes = await portalSession.fetch(PDF_SNAPSHOT_URL, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -122,14 +113,12 @@ export async function obterPdfNota(idPortal: number, chaveAcesso: string): Promi
       return null;
     }
 
-    // Step 2: init report vars (may be required by Stimulsoft)
     await portalSession.fetch(PDF_INIT_URL, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({ reportName: "NFSe" }).toString(),
     });
 
-    // Step 3: export as PDF
     const exportParams = Buffer.from(
       JSON.stringify({ exportFormat: "Pdf", reportName: "NFSe" }),
     ).toString("base64");
@@ -154,15 +143,13 @@ export async function obterPdfNota(idPortal: number, chaveAcesso: string): Promi
       return null;
     }
 
-    const arrayBuffer = await exportRes.arrayBuffer();
-    return Buffer.from(arrayBuffer);
+    return Buffer.from(await exportRes.arrayBuffer());
   } catch (err) {
     logger.error({ err, idPortal }, "Erro ao obter PDF da nota");
     return null;
   }
 }
 
-/** URL pública para notas de outros municípios — não exige autenticação */
 export function urlConsultaPublica(chaveAcesso: string): string {
   return `https://www.nfse.gov.br/consultapublica/?chave=${chaveAcesso}&tpc=1`;
 }
