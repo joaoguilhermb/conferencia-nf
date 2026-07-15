@@ -35,7 +35,10 @@ export function serveStatic(app: Express) {
 
   // SPA fallback: any request that didn't match /api or a static file
   // gets the index.html so client-side routing works correctly.
-  app.get("*", (_req, res) => {
+  // app.get("*", ...) is intentionally avoided here because Express 5 uses
+  // path-to-regexp v8 which rejects bare "*" wildcards (PathError).
+  // app.use without a path is the correct Express 5 catch-all.
+  app.use((_req, res) => {
     res.sendFile(path.join(publicDir, "index.html"));
   });
 }
