@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import type {
   ResultadoReconciliacao,
   NotaFaltante,
@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search } from "lucide-react";
+import { Search, FileDown, Loader2 } from "lucide-react";
 
 interface ResultsDashboardProps {
   results: ResultadoReconciliacao;
@@ -57,6 +57,74 @@ function CnpjCell({ cnpj, razaoSocial }: { cnpj: string; razaoSocial: string }) 
         </div>
       )}
     </div>
+  );
+}
+
+function PdfButton({ notaId, numeroNota }: { notaId?: number; numeroNota: string }) {
+  const [loading, setLoading] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const handleClick = useCallback(async () => {
+    if (notaId === undefined) return;
+    setLoading(true);
+    setErro(null);
+    try {
+      const res = await fetch(`/api/notas/${notaId}/pdf`, { method: "POST" });
+      const contentType = res.headers.get("content-type") ?? "";
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error((errData as { erro?: string }).erro ?? `Erro HTTP ${res.status}`);
+      }
+
+      if (contentType.includes("application/pdf")) {
+        // Resposta é um blob PDF — dispara download automático
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `nf-${numeroNota}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      } else {
+        // Resposta é JSON com URL externa
+        const data = (await res.json()) as { url?: string; tipo?: string };
+        if (data.url) {
+          window.open(data.url, "_blank", "noopener,noreferrer");
+        }
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro ao obter PDF.";
+      setErro(msg);
+      // Limpa o erro após 4 segundos
+      setTimeout(() => setErro(null), 4000);
+    } finally {
+      setLoading(false);
+    }
+  }, [notaId, numeroNota]);
+
+  if (notaId === undefined) return null;
+
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); void handleClick(); }}
+      disabled={loading}
+      title={erro ?? `Baixar PDF da NFS-e ${numeroNota}`}
+      className={`inline-flex items-center justify-center w-6 h-6 rounded ml-1.5 transition-colors
+        ${erro
+          ? "text-destructive hover:bg-destructive/10"
+          : "text-muted-foreground hover:text-foreground hover:bg-muted"
+        }
+        disabled:opacity-40 disabled:cursor-wait
+      `}
+    >
+      {loading
+        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+        : <FileDown className="w-3.5 h-3.5" />
+      }
+    </button>
   );
 }
 
@@ -239,12 +307,18 @@ export function ResultsDashboard({ results }: ResultsDashboardProps) {
                         <TableHead>ISS Retido</TableHead>
                         <TableHead className="text-right">Valor Base</TableHead>
                         <TableHead className="text-right">Valor ISS</TableHead>
+                        <TableHead className="w-8"></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {(faltantesFiltradas as NotaFaltante[]).map((nota, i) => (
                         <TableRow key={i} className="hover:bg-red-50/30 dark:hover:bg-red-950/10">
-                          <TableCell className="font-semibold">{nota.numeroNota}</TableCell>
+                          <TableCell className="font-semibold">
+                            <span className="inline-flex items-center">
+                              {nota.numeroNota}
+                              <PdfButton notaId={nota.id} numeroNota={nota.numeroNota} />
+                            </span>
+                          </TableCell>
                           <TableCell>{nota.dataEmissao || "—"}</TableCell>
                           <TableCell>
                             <CnpjCell cnpj={nota.cnpj} razaoSocial={nota.razaoSocial ?? ""} />
@@ -305,12 +379,18 @@ export function ResultsDashboard({ results }: ResultsDashboardProps) {
                         <TableHead className="text-right">ISS (LF)</TableHead>
                         <TableHead className="text-right">ISS (Apollo)</TableHead>
                         <TableHead className="text-right">Diferença ISS</TableHead>
+                        <TableHead className="w-8"></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {(divergenciasFiltradas as NotaDivergente[]).map((nota, i) => (
                         <TableRow key={i} className="hover:bg-amber-50/30 dark:hover:bg-amber-950/10">
-                          <TableCell className="font-semibold">{nota.numeroNota}</TableCell>
+                          <TableCell className="font-semibold">
+                            <span className="inline-flex items-center">
+                              {nota.numeroNota}
+                              <PdfButton notaId={nota.id} numeroNota={nota.numeroNota} />
+                            </span>
+                          </TableCell>
                           <TableCell>
                             <CnpjCell cnpj={nota.cnpj} razaoSocial={nota.razaoSocial ?? ""} />
                           </TableCell>
@@ -373,12 +453,18 @@ export function ResultsDashboard({ results }: ResultsDashboardProps) {
                         <TableHead>CNPJ / Razão Social</TableHead>
                         <TableHead className="text-right">Valor Base</TableHead>
                         <TableHead className="text-right">Valor ISS</TableHead>
+                        <TableHead className="w-8"></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {(canceladasFiltradas as NotaCancelada[]).map((nota, i) => (
                         <TableRow key={i} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20">
-                          <TableCell className="font-semibold text-slate-500">{nota.numeroNota}</TableCell>
+                          <TableCell className="font-semibold text-slate-500">
+                            <span className="inline-flex items-center">
+                              {nota.numeroNota}
+                              <PdfButton notaId={nota.id} numeroNota={nota.numeroNota} />
+                            </span>
+                          </TableCell>
                           <TableCell>{nota.dataEmissao || "—"}</TableCell>
                           <TableCell>
                             <CnpjCell cnpj={nota.cnpj} razaoSocial={nota.razaoSocial ?? ""} />
@@ -427,12 +513,18 @@ export function ResultsDashboard({ results }: ResultsDashboardProps) {
                         <TableHead>ISS Retido</TableHead>
                         <TableHead className="text-right">Valor Base</TableHead>
                         <TableHead className="text-right">Valor ISS</TableHead>
+                        <TableHead className="w-8"></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {(validadasFiltradas as NotaValidada[]).map((nota, i) => (
                         <TableRow key={i} className="hover:bg-green-50/30 dark:hover:bg-green-950/10">
-                          <TableCell className="font-semibold">{nota.numeroNota}</TableCell>
+                          <TableCell className="font-semibold">
+                            <span className="inline-flex items-center">
+                              {nota.numeroNota}
+                              <PdfButton notaId={nota.id} numeroNota={nota.numeroNota} />
+                            </span>
+                          </TableCell>
                           <TableCell>{nota.dataEmissao || "—"}</TableCell>
                           <TableCell>
                             <CnpjCell cnpj={nota.cnpj} razaoSocial={nota.razaoSocial ?? ""} />

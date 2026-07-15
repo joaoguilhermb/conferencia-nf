@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { UploadScreen } from "@/components/upload-screen";
 import { ResultsDashboard } from "@/components/results-dashboard";
 import type { ResultadoReconciliacao } from "@/types/reconciliacao";
 import { useToast } from "@/hooks/use-toast";
-import { User, RefreshCw, Clock } from "lucide-react";
+import { User, RefreshCw, Clock, GitCompare } from "lucide-react";
 
 // ---------------------------------------------------------------------------
 // Tela de login — só pede o nome
@@ -96,6 +96,7 @@ export default function Home() {
   const [results, setResults] = useState<ResultadoReconciliacao | null>(null);
   const [competencia, setCompetencia] = useState<"mesAtual" | "mesAnterior">("mesAtual");
   const { toast } = useToast();
+  const reconciliarInputRef = useRef<HTMLInputElement>(null);
 
   // Load dashboard on first render after login
   const carregarDashboard = useCallback(async () => {
@@ -240,6 +241,35 @@ export default function Home() {
             <RefreshCw className={`w-3.5 h-3.5 ${isAtualizando ? "animate-spin" : ""}`} />
             {isAtualizando ? "Buscando…" : "Buscar no Portal"}
           </button>
+
+          {/* Botão Reconciliar — só aparece quando já há resultados carregados */}
+          {results && (
+            <>
+              <input
+                ref={reconciliarInputRef}
+                type="file"
+                accept=".csv,.xlsx,.pdf"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    void handleProcessApollo(file);
+                  }
+                  // Limpa o input para permitir re-seleção do mesmo arquivo
+                  e.target.value = "";
+                }}
+              />
+              <button
+                id="btn-reconciliar"
+                onClick={() => reconciliarInputRef.current?.click()}
+                disabled={isProcessingReconciliacao}
+                className="flex items-center gap-1.5 text-sm font-medium bg-primary text-primary-foreground px-3 py-1.5 rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors"
+              >
+                <GitCompare className={`w-3.5 h-3.5 ${isProcessingReconciliacao ? "animate-pulse" : ""}`} />
+                {isProcessingReconciliacao ? "Reconciliando…" : "Reconciliar"}
+              </button>
+            </>
+          )}
         </div>
       </header>
 
