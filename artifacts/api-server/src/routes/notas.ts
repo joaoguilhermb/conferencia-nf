@@ -63,6 +63,7 @@ router.post("/notas/:id/pdf", async (req, res) => {
   // exibir a nota. O frontend abre isso numa aba nova e o usuário usa o
   // Ctrl+P do navegador pra salvar como PDF, se quiser.
   try {
+    await new Promise(resolve => setTimeout(resolve, 1000));
     const html = await obterHtmlNota(nota.idPortal);
     if (html) {
       res.json({ html, tipo: "html" });
