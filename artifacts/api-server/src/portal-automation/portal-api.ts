@@ -3,6 +3,8 @@ import { portalSession } from "./portal-session.js";
 import { logger } from "../lib/logger.js";
 import type { NotaPortal, Competencia } from "./portal-types.js";
 
+let filaPortal: Promise<void> = Promise.resolve();
+
 const PORTAL_BASE = "https://nfse.rondonopolis.mt.gov.br";
 const GRID_URL = `${PORTAL_BASE}/NFSe/DocumentosFiscais/EmissaoLivroFiscal/GetDocumentosFiscaisGrid`;
 
@@ -204,6 +206,13 @@ interface SnapshotResponse {
 export async function obterHtmlNota(idPortal: number): Promise<string | null> {
   logger.info({ idPortal }, "Solicitando visualização da nota fiscal");
 
+  await filaPortal;
+
+  let resolverFila: () => void = () => { };
+  filaPortal = new Promise<void>((resolve) => {
+    resolverFila = resolve;
+  });
+
   try {
     // ── Passo 1: gerar o relatório dessa nota e seguir o redirect ────────────
     const gerarBody = new URLSearchParams({
@@ -379,6 +388,8 @@ ${conteudoHtml}
   } catch (err) {
     logger.error({ err, idPortal }, "Erro ao obter HTML da nota");
     return null;
+  } finally {
+    resolverFila();
   }
 }
 
